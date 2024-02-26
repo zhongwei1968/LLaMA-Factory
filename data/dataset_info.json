@@ -3,13 +3,14 @@
     "file_name": "alpaca_data_en_52k.json",
     "file_sha1": "607f94a7f581341e59685aef32f531095232cf23"
   },
-  "alpaca_en_test": {
-    "file_name": "alpaca_data_en_test.json",
+  "SLR_100_test": {
+    "file_name": "SLR_test_100_301123.json",
      "columns": {
       "prompt": "instruction",
       "query": "input",
-      "response": "output"
-    }
+      "response": "output",
+       "system": "system"
+     }
   },
   "alpaca_zh": {
     "file_name": "alpaca_data_zh_51k.json",
