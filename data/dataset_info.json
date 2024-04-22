@@ -295,6 +295,10 @@
     },
     "ranking": true
   },
+  "comparison_en_test": {
+    "file_name": "comparison_data_en_test.json",
+    "ranking": true
+  },
   "comparison_gpt4_en": {
     "file_name": "comparison_gpt4_data_en.json",
     "file_sha1": "96fa18313544e22444fe20eead7754b17da452ae",
