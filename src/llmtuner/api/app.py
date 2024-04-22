@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
@@ -73,13 +72,12 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
         allow_headers=["*"],
     )
 
-    semaphore = asyncio.Semaphore(int(os.environ.get("MAX_CONCURRENT", 1)))
     role_mapping = {
-        Role.USER: DataRole.USER,
-        Role.ASSISTANT: DataRole.ASSISTANT,
-        Role.SYSTEM: DataRole.SYSTEM,
-        Role.FUNCTION: DataRole.FUNCTION,
-        Role.TOOL: DataRole.OBSERVATION,
+        Role.USER: DataRole.USER.value,
+        Role.ASSISTANT: DataRole.ASSISTANT.value,
+        Role.SYSTEM: DataRole.SYSTEM.value,
+        Role.FUNCTION: DataRole.FUNCTION.value,
+        Role.TOOL: DataRole.OBSERVATION.value,
     }
 
     @app.get("/v1/models", response_model=ModelList)
@@ -89,13 +87,13 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
 
     @app.post("/v1/chat/completions", response_model=ChatCompletionResponse, status_code=status.HTTP_200_OK)
     async def create_chat_completion(request: ChatCompletionRequest):
-        if not chat_model.can_generate:
+        if not chat_model.engine.can_generate:
             raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED, detail="Not allowed")
 
         if len(request.messages) == 0:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid length")
 
-        if role_mapping[request.messages[0].role] == DataRole.SYSTEM:
+        if request.messages[0].role == Role.SYSTEM:
             system = request.messages.pop(0).content
         else:
             system = ""
@@ -105,35 +103,37 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
 
         input_messages = []
         for i, message in enumerate(request.messages):
-            input_messages.append({"role": role_mapping[message.role], "content": message.content})
-            if i % 2 == 0 and input_messages[i]["role"] not in [DataRole.USER, DataRole.OBSERVATION]:
+            if i % 2 == 0 and message.role not in [Role.USER, Role.TOOL]:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
-            elif i % 2 == 1 and input_messages[i]["role"] not in [DataRole.ASSISTANT, DataRole.FUNCTION]:
+            elif i % 2 == 1 and message.role not in [Role.ASSISTANT, Role.FUNCTION]:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
+
+            if message.role == Role.ASSISTANT and isinstance(message.tool_calls, list) and len(message.tool_calls):
+                name = message.tool_calls[0].function.name
+                arguments = message.tool_calls[0].function.arguments
+                content = json.dumps({"name": name, "argument": arguments}, ensure_ascii=False)
+                input_messages.append({"role": role_mapping[Role.FUNCTION], "content": content})
+            else:
+                input_messages.append({"role": role_mapping[message.role], "content": message.content})
 
         tool_list = request.tools
         if isinstance(tool_list, list) and len(tool_list):
             try:
-                tools = json.dumps([tool["function"] for tool in tool_list], ensure_ascii=False)
+                tools = json.dumps([dictify(tool.function) for tool in tool_list], ensure_ascii=False)
             except Exception:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid tools")
         else:
             tools = ""
 
-        async with semaphore:
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, chat_completion, input_messages, system, tools, request)
-
-    def chat_completion(messages: Sequence[Dict[str, str]], system: str, tools: str, request: ChatCompletionRequest):
         if request.stream:
             if tools:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot stream function calls.")
 
-            generate = stream_chat_completion(messages, system, tools, request)
+            generate = stream_chat_completion(input_messages, system, tools, request)
             return EventSourceResponse(generate, media_type="text/event-stream")
 
-        responses = chat_model.chat(
-            messages,
+        responses = await chat_model.achat(
+            input_messages,
             system,
             tools,
             do_sample=request.do_sample,
@@ -147,7 +147,7 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
         choices = []
         for i, response in enumerate(responses):
             if tools:
-                result = chat_model.template.format_tools.extract(response.response_text)
+                result = chat_model.engine.template.format_tools.extract(response.response_text)
             else:
                 result = response.response_text
 
@@ -176,7 +176,7 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
 
         return ChatCompletionResponse(model=request.model, choices=choices, usage=usage)
 
-    def stream_chat_completion(
+    async def stream_chat_completion(
         messages: Sequence[Dict[str, str]], system: str, tools: str, request: ChatCompletionRequest
     ):
         choice_data = ChatCompletionResponseStreamChoice(
@@ -185,7 +185,7 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
         chunk = ChatCompletionStreamResponse(model=request.model, choices=[choice_data])
         yield jsonify(chunk)
 
-        for new_text in chat_model.stream_chat(
+        async for new_token in chat_model.astream_chat(
             messages,
             system,
             tools,
@@ -194,11 +194,11 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
             top_p=request.top_p,
             max_new_tokens=request.max_tokens,
         ):
-            if len(new_text) == 0:
+            if len(new_token) == 0:
                 continue
 
             choice_data = ChatCompletionResponseStreamChoice(
-                index=0, delta=ChatCompletionMessage(content=new_text), finish_reason=None
+                index=0, delta=ChatCompletionMessage(content=new_token), finish_reason=None
             )
             chunk = ChatCompletionStreamResponse(model=request.model, choices=[choice_data])
             yield jsonify(chunk)
@@ -212,18 +212,13 @@ def create_app(chat_model: "ChatModel") -> "FastAPI":
 
     @app.post("/v1/score/evaluation", response_model=ScoreEvaluationResponse, status_code=status.HTTP_200_OK)
     async def create_score_evaluation(request: ScoreEvaluationRequest):
-        if chat_model.can_generate:
+        if chat_model.engine.can_generate:
             raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED, detail="Not allowed")
 
         if len(request.messages) == 0:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request")
 
-        async with semaphore:
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, get_score, request)
-
-    def get_score(request: ScoreEvaluationRequest):
-        scores = chat_model.get_scores(request.messages, max_length=request.max_length)
+        scores = await chat_model.aget_scores(request.messages, max_length=request.max_length)
         return ScoreEvaluationResponse(model=request.model, scores=scores)
 
     return app
