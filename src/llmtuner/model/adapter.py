@@ -5,7 +5,7 @@ from peft import LoraConfig, LoraModel, PeftModel, TaskType, get_peft_model
 from transformers.integrations import is_deepspeed_zero3_enabled
 
 from ..extras.logging import get_logger
-from .utils import find_all_linear_modules, find_expanded_modules
+from .utils import QuantizationMethod, find_all_linear_modules, find_expanded_modules
 
 
 if TYPE_CHECKING:
@@ -32,9 +32,13 @@ def init_adapter(
         logger.info("Adapter is not found at evaluation, load the base model.")
         return model
 
+    if finetuning_args.finetuning_type != "lora" and getattr(model, "quantization_method", None):
+        raise ValueError("You can only use lora for quantized models.")
+
     if finetuning_args.finetuning_type == "full" and is_trainable:
         logger.info("Fine-tuning method: Full")
-        model = model.float()
+        if (not finetuning_args.pure_bf16) and (not finetuning_args.use_badam):
+            model = model.float()
 
     if finetuning_args.finetuning_type == "freeze" and is_trainable:
         logger.info("Fine-tuning method: Freeze")
@@ -65,6 +69,8 @@ def init_adapter(
         for name, _ in model.named_modules():
             if ".0." in name:
                 freeze_modules.add(name.split(".0.")[-1].split(".")[0])
+            elif ".1." in name:  # MoD starts from layer 1
+                freeze_modules.add(name.split(".1.")[-1].split(".")[0])
 
         trainable_layers = []
         for module_name in finetuning_args.name_module_trainable:
@@ -78,14 +84,15 @@ def init_adapter(
 
         for name, param in model.named_parameters():
             if any(trainable_layer in name for trainable_layer in trainable_layers):
-                param.data = param.data.to(torch.float32)
+                if (not finetuning_args.pure_bf16) and (not finetuning_args.use_badam):
+                    param.data = param.data.to(torch.float32)
             else:
                 param.requires_grad_(False)
 
         logger.info("Set trainable layers: {}".format(",".join(map(str, trainable_layer_ids))))
 
     if finetuning_args.finetuning_type == "lora":
-        logger.info("Fine-tuning method: LoRA")
+        logger.info("Fine-tuning method: {}".format("DoRA" if finetuning_args.use_dora else "LoRA"))
         adapter_to_resume = None
 
         if model_args.adapter_name_or_path is not None:
@@ -105,14 +112,18 @@ def init_adapter(
                 adapter_to_merge = model_args.adapter_name_or_path
 
             for adapter in adapter_to_merge:
-                model: "LoraModel" = PeftModel.from_pretrained(model, adapter)
+                model: "LoraModel" = PeftModel.from_pretrained(
+                    model, adapter, offload_folder=model_args.offload_folder
+                )
                 model = model.merge_and_unload()
 
             if len(adapter_to_merge) > 0:
                 logger.info("Merged {} adapter(s).".format(len(adapter_to_merge)))
 
             if adapter_to_resume is not None:  # resume lora training
-                model = PeftModel.from_pretrained(model, adapter_to_resume, is_trainable=is_trainable)
+                model = PeftModel.from_pretrained(
+                    model, adapter_to_resume, is_trainable=is_trainable, offload_folder=model_args.offload_folder
+                )
 
         if is_trainable and adapter_to_resume is None:  # create new lora weights while training
             if len(finetuning_args.lora_target) == 1 and finetuning_args.lora_target[0] == "all":
@@ -123,30 +134,43 @@ def init_adapter(
             if finetuning_args.use_llama_pro:
                 target_modules = find_expanded_modules(model, target_modules, finetuning_args.num_layer_trainable)
 
+            if (
+                finetuning_args.use_dora
+                and getattr(model, "quantization_method", None) is not None
+                and getattr(model, "quantization_method", None) != QuantizationMethod.BITS_AND_BYTES
+            ):
+                raise ValueError("DoRA is not compatible with PTQ-quantized models.")
+
             peft_kwargs = {
                 "r": finetuning_args.lora_rank,
                 "target_modules": target_modules,
                 "lora_alpha": finetuning_args.lora_alpha,
                 "lora_dropout": finetuning_args.lora_dropout,
                 "use_rslora": finetuning_args.use_rslora,
+                "modules_to_save": finetuning_args.additional_target,
             }
 
             if model_args.use_unsloth:
                 from unsloth import FastLanguageModel  # type: ignore
 
-                unsloth_peft_kwargs = {"model": model, "max_seq_length": model_args.model_max_length}
+                unsloth_peft_kwargs = {
+                    "model": model,
+                    "max_seq_length": model_args.model_max_length,
+                    "use_gradient_checkpointing": "unsloth",
+                }
                 model = FastLanguageModel.get_peft_model(**peft_kwargs, **unsloth_peft_kwargs)
             else:
                 lora_config = LoraConfig(
                     task_type=TaskType.CAUSAL_LM,
                     inference_mode=False,
-                    modules_to_save=finetuning_args.additional_target,
+                    use_dora=finetuning_args.use_dora,
                     **peft_kwargs,
                 )
                 model = get_peft_model(model, lora_config)
 
-        for param in filter(lambda p: p.requires_grad, model.parameters()):
-            param.data = param.data.to(torch.bfloat16 if finetuning_args.lora_bf16_mode else torch.float32)
+        if (not finetuning_args.pure_bf16) and (not finetuning_args.use_badam):
+            for param in filter(lambda p: p.requires_grad, model.parameters()):
+                param.data = param.data.to(torch.float32)
 
         if model_args.adapter_name_or_path is not None:
             logger.info("Loaded adapter(s): {}".format(",".join(model_args.adapter_name_or_path)))

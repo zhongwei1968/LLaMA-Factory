@@ -14,6 +14,7 @@ from transformers.utils import (
     is_torch_npu_available,
     is_torch_xpu_available,
 )
+from transformers.utils.versions import require_version
 
 from .constants import V_HEAD_SAFE_WEIGHTS_NAME, V_HEAD_WEIGHTS_NAME
 from .logging import get_logger
@@ -56,6 +57,17 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
+def check_dependencies() -> None:
+    if int(os.environ.get("DISABLE_VERSION_CHECK", "0")):
+        logger.warning("Version checking has been disabled, may lead to unexpected behaviors.")
+    else:
+        require_version("transformers>=4.37.2", "To fix: pip install transformers>=4.37.2")
+        require_version("datasets>=2.14.3", "To fix: pip install datasets>=2.14.3")
+        require_version("accelerate>=0.27.2", "To fix: pip install accelerate>=0.27.2")
+        require_version("peft>=0.10.0", "To fix: pip install peft>=0.10.0")
+        require_version("trl>=0.8.1", "To fix: pip install trl>=0.8.1")
+
+
 def count_parameters(model: torch.nn.Module) -> Tuple[int, int]:
     r"""
     Returns the number of trainable parameters and number of all parameters in the model.
@@ -69,7 +81,14 @@ def count_parameters(model: torch.nn.Module) -> Tuple[int, int]:
 
         # Due to the design of 4bit linear layers from bitsandbytes, multiply the number of parameters by 2
         if param.__class__.__name__ == "Params4bit":
-            num_params = num_params * 2
+            if hasattr(param, "quant_storage") and hasattr(param.quant_storage, "itemsize"):
+                num_bytes = param.quant_storage.itemsize
+            elif hasattr(param, "element_size"):  # for older pytorch version
+                num_bytes = param.element_size()
+            else:
+                num_bytes = 1
+
+            num_params = num_params * 2 * num_bytes
 
         all_param += num_params
         if param.requires_grad:
@@ -145,6 +164,12 @@ def get_current_device() -> torch.device:
 
 
 def get_device_count() -> int:
+    r"""
+    Gets the number of available GPU devices.
+    """
+    if not torch.cuda.is_available():
+        return 0
+
     return torch.cuda.device_count()
 
 
@@ -169,6 +194,13 @@ def infer_optim_dtype(model_dtype: torch.dtype) -> torch.dtype:
         return torch.float32
 
 
+def has_tokenized_data(path: os.PathLike) -> bool:
+    r"""
+    Checks if the path has a tokenized dataset.
+    """
+    return os.path.isdir(path) and len(os.listdir(path)) > 0
+
+
 def torch_gc() -> None:
     r"""
     Collects GPU memory.
@@ -179,17 +211,15 @@ def torch_gc() -> None:
         torch.cuda.ipc_collect()
 
 
-def try_download_model_from_ms(model_args: "ModelArguments") -> None:
+def try_download_model_from_ms(model_args: "ModelArguments") -> str:
     if not use_modelscope() or os.path.exists(model_args.model_name_or_path):
-        return
+        return model_args.model_name_or_path
 
     try:
         from modelscope import snapshot_download
 
         revision = "master" if model_args.model_revision == "main" else model_args.model_revision
-        model_args.model_name_or_path = snapshot_download(
-            model_args.model_name_or_path, revision=revision, cache_dir=model_args.cache_dir
-        )
+        return snapshot_download(model_args.model_name_or_path, revision=revision, cache_dir=model_args.cache_dir)
     except ImportError:
         raise ImportError("Please install modelscope via `pip install modelscope -U`")
 

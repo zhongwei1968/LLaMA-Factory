@@ -2,21 +2,18 @@
 
 from typing import TYPE_CHECKING, List, Optional
 
-from transformers import Seq2SeqTrainingArguments
-
-from ...data import get_dataset, split_dataset
+from ...data import PairwiseDataCollatorWithPadding, get_dataset, split_dataset
 from ...extras.callbacks import FixValueHeadModelCallback
 from ...extras.misc import fix_valuehead_checkpoint
 from ...extras.ploting import plot_loss
-from ...model import load_model_and_tokenizer
-from ...train.rm.collator import PairwiseDataCollatorWithPadding
-from ...train.rm.metric import compute_accuracy
-from ...train.rm.trainer import PairwiseTrainer
-from ...train.utils import create_modelcard_and_push
+from ...model import load_model, load_tokenizer
+from ..utils import create_modelcard_and_push
+from .metric import compute_accuracy
+from .trainer import PairwiseTrainer
 
 
 if TYPE_CHECKING:
-    from transformers import TrainerCallback
+    from transformers import Seq2SeqTrainingArguments, TrainerCallback
 
     from ...hparams import DataArguments, FinetuningArguments, ModelArguments
 
@@ -28,21 +25,19 @@ def run_rm(
     finetuning_args: "FinetuningArguments",
     callbacks: Optional[List["TrainerCallback"]] = None,
 ):
-    model, tokenizer = load_model_and_tokenizer(
-        model_args, finetuning_args, training_args.do_train, add_valuehead=True
-    )
+    tokenizer = load_tokenizer(model_args)
     dataset = get_dataset(tokenizer, model_args, data_args, training_args, stage="rm")
+    model = load_model(tokenizer, model_args, finetuning_args, training_args.do_train, add_valuehead=True)
     data_collator = PairwiseDataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
 
     # Update arguments
-    training_args_dict = training_args.to_dict()
-    training_args_dict.update(dict(remove_unused_columns=False))  # important for pairwise dataset
-    training_args = Seq2SeqTrainingArguments(**training_args_dict)
+    training_args.remove_unused_columns = False  # important for pairwise dataset
 
     # Initialize our Trainer
     trainer = PairwiseTrainer(
         model=model,
         args=training_args,
+        finetuning_args=finetuning_args,
         tokenizer=tokenizer,
         data_collator=data_collator,
         callbacks=callbacks + [FixValueHeadModelCallback()],
@@ -60,7 +55,7 @@ def run_rm(
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
         if trainer.is_world_process_zero() and finetuning_args.plot_loss:
-            plot_loss(training_args.output_dir, keys=["loss", "eval_loss"])
+            plot_loss(training_args.output_dir, keys=["loss", "eval_loss", "eval_accuracy"])
 
     # Evaluation
     if training_args.do_eval:
