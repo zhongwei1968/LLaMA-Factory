@@ -4,7 +4,7 @@
 .venv
 cache
 data
-examples
+output
 .dockerignore
 .gitattributes
 .gitignore
