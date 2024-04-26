@@ -67,6 +67,9 @@ def _verify_model_args(model_args: "ModelArguments", finetuning_args: "Finetunin
         if finetuning_args.finetuning_type != "lora":
             raise ValueError("Quantization is only compatible with the LoRA method.")
 
+        if model_args.resize_vocab:
+            raise ValueError("Cannot resize embedding layers of a quantized model.")
+
         if model_args.adapter_name_or_path is not None and finetuning_args.create_new_adapter:
             raise ValueError("Cannot create new adapter upon a quantized model.")
 
@@ -93,6 +96,9 @@ def _check_extra_dependencies(
 
     if finetuning_args.use_badam:
         require_version("badam", "To fix: pip install badam")
+
+    if finetuning_args.plot_loss:
+        require_version("matplotlib", "To fix: pip install matplotlib")
 
     if training_args is not None and training_args.predict_with_generate:
         require_version("jieba", "To fix: pip install jieba")
@@ -190,16 +196,20 @@ def get_train_args(args: Optional[Dict[str, Any]] = None) -> _TRAIN_CLS:
     if model_args.infer_backend == "vllm":
         raise ValueError("vLLM backend is only available for API, CLI and Web.")
 
+    if model_args.visual_inputs and data_args.packing:
+        raise ValueError("Cannot use packing in MLLM fine-tuning.")
+
     _verify_model_args(model_args, finetuning_args)
     _check_extra_dependencies(model_args, finetuning_args, training_args)
 
     if (
         training_args.do_train
         and finetuning_args.finetuning_type == "lora"
+        and model_args.quantization_bit is None
         and model_args.resize_vocab
         and finetuning_args.additional_target is None
     ):
-        logger.warning("Add token embeddings to `additional_target` to make the added tokens trainable.")
+        logger.warning("Remember to add embedding layers to `additional_target` to make the added tokens trainable.")
 
     if training_args.do_train and model_args.quantization_bit is not None and (not model_args.upcast_layernorm):
         logger.warning("We recommend enable `upcast_layernorm` in quantized training.")
@@ -301,14 +311,17 @@ def get_infer_args(args: Optional[Dict[str, Any]] = None) -> _INFER_CLS:
         if finetuning_args.stage != "sft":
             raise ValueError("vLLM engine only supports auto-regressive models.")
 
-        if model_args.adapter_name_or_path is not None:
-            raise ValueError("vLLM engine does not support LoRA adapters. Merge them first.")
-
         if model_args.quantization_bit is not None:
-            raise ValueError("vLLM engine does not support quantization.")
+            raise ValueError("vLLM engine does not support bnb quantization (GPTQ and AWQ are supported).")
 
         if model_args.rope_scaling is not None:
             raise ValueError("vLLM engine does not support RoPE scaling.")
+
+        if model_args.adapter_name_or_path is not None and len(model_args.adapter_name_or_path) != 1:
+            raise ValueError("vLLM only accepts a single adapter. Merge them first.")
+
+        if model_args.visual_inputs:
+            raise ValueError("vLLM engine does not support MLLM yet. Stay tuned.")
 
     _verify_model_args(model_args, finetuning_args)
     _check_extra_dependencies(model_args, finetuning_args)
