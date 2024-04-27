@@ -20,6 +20,16 @@
        "system": "system"
      }
   },
+  "SLR_100_test_fact_jsonl": {
+    "file_name": "SLR_test_100_181223.jsonl",
+     "columns": {
+       "system": "system instructions",
+       "prompt": "user instruction",
+       "query": "judgment",
+       "tail": "tail {num_words} words",
+       "response": "headnotes/facts"
+     }
+  },
   "alpaca_zh": {
     "file_name": "alpaca_data_zh_51k.json",
     "file_sha1": "2ba9827122c158dc256668d42bd1bcb8bc6b786e"

@@ -33,6 +33,7 @@ class DatasetAttr:
     prompt: Optional[str] = "instruction"
     query: Optional[str] = "input"
     response: Optional[str] = "output"
+    tail: Optional[str] = None
     history: Optional[str] = None
     """ columns for the sharegpt format """
     messages: Optional[str] = "conversations"
@@ -108,7 +109,7 @@ def get_dataset_list(data_args: "DataArguments") -> List["DatasetAttr"]:
         if "columns" in dataset_info[name]:
             column_names = ["system", "images"]
             if dataset_attr.formatting == "alpaca":
-                column_names.extend(["prompt", "query", "response", "history"])
+                column_names.extend(["prompt", "query", "response", "history","tail"])
             else:
                 column_names.extend(["messages", "tools"])
 

@@ -32,6 +32,9 @@ def convert_alpaca(
         if dataset_attr.query and examples[dataset_attr.query][i]:
             content.append(examples[dataset_attr.query][i])
 
+        if dataset_attr.tail and examples[dataset_attr.tail][i]:
+            content.append(examples[dataset_attr.tail][i])
+
         prompt.append({"role": Role.USER.value, "content": "\n".join(content)})
 
         if dataset_attr.response and isinstance(examples[dataset_attr.response][i], list):
@@ -103,6 +106,16 @@ def convert_sharegpt(
     return outputs
 
 
+# Define a function to add a column with a specified name and default value
+def add_column(example, column_name, default_value=None, ori_column_name=None):
+    if default_value:
+        example[column_name] = default_value
+    elif ori_column_name:
+        names = ori_column_name.split('/')
+        example[column_name] = example[names[0]][names[1]] if len(names) == 2 else example[names[0]]
+    return example
+
+
 def align_dataset(
     dataset: Union["Dataset", "IterableDataset"], dataset_attr: "DatasetAttr", data_args: "DataArguments"
 ) -> Union["Dataset", "IterableDataset"]:
@@ -140,6 +153,26 @@ def align_dataset(
             load_from_cache_file=(not data_args.overwrite_cache),
             desc="Converting format of dataset",
         )
+
+    if dataset_attr.system not in dataset.column_names:
+        # Apply the function to each example in the dataset
+        dataset = dataset.map(lambda example: add_column(example, 'system', dataset_attr.system))
+        dataset_attr.system = 'system'
+    if dataset_attr.prompt not in dataset.column_names:
+        # Apply the function to each example in the dataset
+        dataset = dataset.map(lambda example: add_column(example, 'prompt', dataset_attr.prompt))
+        dataset_attr.prompt = 'prompt'
+    if dataset_attr.response not in dataset.column_names:
+        # Apply the function to each example in the dataset
+        dataset = dataset.map(lambda example: add_column(example, 'response',
+                                                         ori_column_name=dataset_attr.response))
+        dataset_attr.response = 'response'
+    if dataset_attr.tail:
+        if dataset_attr.tail not in dataset.column_names:
+            # Apply the function to each example in the dataset
+            dataset = dataset.map(lambda example: add_column(example, "tail", dataset_attr.tail))
+            dataset_attr.tail = "tail"
+            column_names.append(dataset_attr.tail)
 
     return dataset.map(
         convert_func,
