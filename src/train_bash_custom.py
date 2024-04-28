@@ -5,7 +5,8 @@ TRAIN_ARGS_ADD = os.getenv('TRAIN_ARGS_ADD')
 DEEPSPEED=os.getenv('DEEPSPEED','true')
 NUM_GPUS = os.getenv('NUM_GPUS','1')
 
-print(os.listdir('/opt/ml/'))
+print(os.listdir('/opt/ml/input/'))
+print(os.listdir('/opt/ml/model/'))
 
 if DEEPSPEED=='true':
     subprocess.run(
