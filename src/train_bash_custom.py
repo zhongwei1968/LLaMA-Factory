@@ -8,14 +8,14 @@ if DEEPSPEED=='true':
     subprocess.run(
         ["deepspeed", "--num_gpus", NUM_GPUS, "/app/src/train_bash.py"]+
         ["--deepspeed", "/app/examples/deepspeed/ds_z3_config.json"]+
-        TRAIN_ARGS.split(' ')+
-        TRAIN_ARGS_ADD.split(' '),
+        TRAIN_ARGS.split()+
+        TRAIN_ARGS_ADD.split(),
         check=True
         )
 else:
     subprocess.run(
         ["python", "src/train_bash.py"]+
-        TRAIN_ARGS.split(' ')+
-        TRAIN_ARGS_ADD.split(' '),
+        TRAIN_ARGS.split()+
+        TRAIN_ARGS_ADD.split(),
         check=True
         )
