@@ -33,7 +33,14 @@ def convert_alpaca(
             content.append(examples[dataset_attr.query][i])
 
         if dataset_attr.tail and examples[dataset_attr.tail][i]:
-            content.append(examples[dataset_attr.tail][i])
+            tail_str = examples[dataset_attr.tail][i]
+            if '{num_words}' in tail_str:
+                word_max = len(tail_str.split())
+                response = examples[dataset_attr.response][i]
+                word_count = len(response.split())
+                # replace {num_words} in prompt_postfix, round to the nearest hundreds
+                tail_str = tail_str.replace('{num_words}', str(round(word_count / 100) * 100))
+            content.append(tail_str)
 
         prompt.append({"role": Role.USER.value, "content": "\n".join(content)})
 
@@ -153,22 +160,21 @@ def align_dataset(
             load_from_cache_file=(not data_args.overwrite_cache),
             desc="Converting format of dataset",
         )
-
-    if dataset_attr.system not in dataset.column_names:
-        # Apply the function to each example in the dataset
-        dataset = dataset.map(lambda example: add_column(example, 'system', dataset_attr.system))
-        dataset_attr.system = 'system'
-    if dataset_attr.prompt not in dataset.column_names:
-        # Apply the function to each example in the dataset
-        dataset = dataset.map(lambda example: add_column(example, 'prompt', dataset_attr.prompt))
-        dataset_attr.prompt = 'prompt'
-    if dataset_attr.response not in dataset.column_names:
-        # Apply the function to each example in the dataset
-        dataset = dataset.map(lambda example: add_column(example, 'response',
-                                                         ori_column_name=dataset_attr.response))
-        dataset_attr.response = 'response'
-    if dataset_attr.tail:
-        if dataset_attr.tail not in dataset.column_names:
+    if dataset_attr.formatting == "alpaca":
+        if dataset_attr.system and dataset_attr.system not in dataset.column_names:
+            # Apply the function to each example in the dataset
+            dataset = dataset.map(lambda example: add_column(example, 'system', dataset_attr.system))
+            dataset_attr.system = 'system'
+        if dataset_attr.prompt and dataset_attr.prompt not in dataset.column_names:
+            # Apply the function to each example in the dataset
+            dataset = dataset.map(lambda example: add_column(example, 'prompt', dataset_attr.prompt))
+            dataset_attr.prompt = 'prompt'
+        if dataset_attr.response and dataset_attr.response not in dataset.column_names:
+            # Apply the function to each example in the dataset
+            dataset = dataset.map(lambda example: add_column(example, 'response',
+                                                             ori_column_name=dataset_attr.response))
+            dataset_attr.response = 'response'
+        if dataset_attr.tail and dataset_attr.tail not in dataset.column_names:
             # Apply the function to each example in the dataset
             dataset = dataset.map(lambda example: add_column(example, "tail", dataset_attr.tail))
             dataset_attr.tail = "tail"
