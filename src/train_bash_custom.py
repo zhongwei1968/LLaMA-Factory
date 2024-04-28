@@ -4,6 +4,9 @@ TRAIN_ARGS = os.getenv('TRAIN_ARGS')
 TRAIN_ARGS_ADD = os.getenv('TRAIN_ARGS_ADD')
 DEEPSPEED=os.getenv('DEEPSPEED','true')
 NUM_GPUS = os.getenv('NUM_GPUS','1')
+
+print(os.listdir('/opt/ml/'))
+
 if DEEPSPEED=='true':
     subprocess.run(
         ["deepspeed", "--num_gpus", NUM_GPUS, "/app/src/train_bash.py"]+
