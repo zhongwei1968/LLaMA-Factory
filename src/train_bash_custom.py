@@ -5,9 +5,10 @@ TRAIN_ARGS_ADD = os.getenv('TRAIN_ARGS_ADD')
 run_com = os.getenv('RUN_CMD','accelerate') # accelerate or deepspeed
 NUM_GPUS = os.getenv('NUM_GPUS','1')
 
-print(os.listdir('/opt/ml/input/data/training'))
+print(os.listdir('/opt/ml/input/data/training'), flush=True)
 
 if run_com=='deepspeed':
+    print("running deepspeed", flush=True)
     subprocess.run(
         ["deepspeed", "--num_gpus", NUM_GPUS, "/app/src/train_bash.py"]+
         ["--deepspeed", "/app/examples/deepspeed/ds_z3_config.json"]+
@@ -16,8 +17,9 @@ if run_com=='deepspeed':
         check=True
         )
 elif run_com=='accelerate':
+    print("running accelerate", flush=True)
     subprocess.run(
-        ["accelerate", "launch", "--config_file", "/app/examples/accelerate/single_config.yaml",
+        ["accelerate", "launch", "--config_file", "/app/examples/accelerate/single_config_8.yaml",
          "/app/src/train_bash.py"]+
         TRAIN_ARGS.split()+
         TRAIN_ARGS_ADD.split(),
