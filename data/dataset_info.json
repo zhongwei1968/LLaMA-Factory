@@ -21,7 +21,7 @@
      }
   },
   "SLR_100_test_fact_jsonl": {
-    "file_name": "SLR_test_100_181223.jsonl",
+    "file_name": "SLR_test_100_301123.jsonl",
      "columns": {
        "system": "You are an experienced legal professional, you will follow user request to deal with any legal task.",
        "prompt": "Summarize the key facts of the following input legal case:\n\nInput:\n",
@@ -31,7 +31,7 @@
      }
   },
   "SLR_100_test_holding_jsonl": {
-    "file_name": "SLR_test_100_181223.jsonl",
+    "file_name": "SLR_test_100_301123.jsonl",
      "columns": {
        "system": "You are an experienced legal professional, you will follow user request to deal with any legal task.",
        "prompt": "Summarize the key holdings of the following input legal case:\n\nInput:\n",
