@@ -13,4 +13,4 @@ RUN pip install flash-attn==2.3.3 --no-build-isolation
 VOLUME [ "/root/.cache/huggingface/", "/app/data", "/app/output" ]
 EXPOSE 7860
 
-CMD [ "python", "src/train_web.py" ]
+CMD [ "llamafactory-cli webui" ]
