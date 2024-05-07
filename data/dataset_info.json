@@ -83,7 +83,7 @@
   },
   "identity": {
     "file_name": "identity.json",
-    "file_sha1": "ffe3ecb58ab642da33fbb514d5e6188f1469ad40"
+    "file_sha1": "0f67e97fd01612006ab3536cdaf6cfb0d1e7f279"
   },
   "oaast_sft": {
     "file_name": "oaast_sft.json",
@@ -244,7 +244,7 @@
     "ms_hub_url": "AI-ModelScope/webnovel_cn"
   },
   "nectar_sft": {
-    "hf_hub_url": "mlinmg/SFT-Nectar",
+    "hf_hub_url": "AstraMindAI/SFT-Nectar",
     "ms_hub_url": "AI-ModelScope/SFT-Nectar"
   },
   "deepctrl": {
@@ -433,7 +433,7 @@
     }
   },
   "nectar_rm": {
-    "hf_hub_url": "mlinmg/RLAIF-Nectar",
+    "hf_hub_url": "AstraMindAI/RLAIF-Nectar",
     "ms_hub_url": "AI-ModelScope/RLAIF-Nectar",
     "ranking": true
   },
