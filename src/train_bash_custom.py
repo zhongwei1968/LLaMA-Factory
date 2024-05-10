@@ -10,7 +10,7 @@ print(os.listdir('/opt/ml/input/data/training'), flush=True)
 if run_com=='deepspeed':
     print("running deepspeed", flush=True)
     subprocess.run(
-        ["deepspeed", "--num_gpus", NUM_GPUS, "/app/src/train_bash.py"]+
+        ["deepspeed", "--num_gpus", NUM_GPUS, "/app/src/train.py"]+
         ["--deepspeed", "/app/examples/deepspeed/ds_z3_config.json"]+
         TRAIN_ARGS.split()+
         TRAIN_ARGS_ADD.split(),
@@ -20,14 +20,14 @@ elif run_com=='accelerate':
     print("running accelerate", flush=True)
     subprocess.run(
         ["accelerate", "launch", "--config_file", "/app/examples/accelerate/single_config_8.yaml",
-         "/app/src/train_bash.py"]+
+         "/app/src/train.py"]+
         TRAIN_ARGS.split()+
         TRAIN_ARGS_ADD.split(),
         check=True
         )
 else:
     subprocess.run(
-        ["python", "src/train_bash.py"]+
+        ["python", "src/train.py"]+
         TRAIN_ARGS.split()+
         TRAIN_ARGS_ADD.split(),
         check=True
