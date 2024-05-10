@@ -68,6 +68,19 @@
       "response": "output"
     }
   },
+  "slr_train": {
+    "file_name": "slr_training_dataset_240125_1523-chat.jsonl",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
 
   "alpaca_zh": {
     "file_name": "alpaca_data_zh_51k.json",
