@@ -171,7 +171,7 @@ def get_dataset(
 
             exit(0)
 
-        if training_args.should_log:
+        if training_args.should_log and os.getenv("PRINT_SAMPLE", "false") == "true":
             try:
                 print_function(next(iter(dataset)))
             except StopIteration:
