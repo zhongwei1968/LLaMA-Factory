@@ -68,8 +68,99 @@
       "response": "output"
     }
   },
-  "slr_train": {
-    "file_name": "slr_training_dataset_240125_1523-chat.jsonl",
+  "slr_train_240506": {
+    "file_name": "slr_training_dataset_240506_1506-chat6.jsonl",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+  "one_detail_book.train.64K": {
+    "file_name": "gpt/one_detail_book.train.64K.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"one_detail_paper.train.64K": {
+    "file_name": "gpt/one_detail_paper.train.64K",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"multi_detail_book.train": {
+    "file_name": "gpt/multi_detail_book.train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"multi_detail_paper_short.train": {
+    "file_name": "gpt/multi_detail_paper_short.train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"multi_detail_paper_long.train": {
+    "file_name": "gpt/multi_detail_paper_long.train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"bio_book.train": {
+    "file_name": "gpt/bio_book.train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+"longalpaca.train": {
+    "file_name": "longalpaca/train.json",
     "formatting": "sharegpt",
     "columns": {
       "messages": "conversations"
@@ -82,6 +173,7 @@
     }
   },
 
+  
   "alpaca_zh": {
     "file_name": "alpaca_data_zh_51k.json",
     "file_sha1": "2ba9827122c158dc256668d42bd1bcb8bc6b786e"
