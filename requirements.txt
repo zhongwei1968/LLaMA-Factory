@@ -6,6 +6,7 @@ peft==0.10.0
 trl==0.8.1
 gradio>=4.0.0
 bitsandbytes==0.43.0
+pyarrow==14.0.1
 scipy
 einops
 sentencepiece
