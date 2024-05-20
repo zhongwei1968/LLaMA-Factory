@@ -36,6 +36,10 @@ class DataArguments:
         default=False,
         metadata={"help": "Whether to disable the mask on the prompt or not."},
     )
+    add_label: bool = field(
+        default=False,
+        metadata={"help": "Whether to add labels for mix pt training in the dataset or not."},
+    )
     streaming: bool = field(
         default=False,
         metadata={"help": "Enable dataset streaming."},
