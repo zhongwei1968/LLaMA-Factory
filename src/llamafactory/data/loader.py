@@ -145,6 +145,8 @@ def get_dataset(
 
             dataset = load_single_dataset(dataset_attr, model_args, data_args)
             mix_stage = 'pt' if len(dataset['response'][0]) == 0 else stage
+            if mix_stage == 'pt' and stage == 'sft':
+                data_args.add_label = True
 
             preprocess_func, print_function = get_preprocess_and_print_func(
                 data_args, training_args, mix_stage, template, tokenizer, processor
@@ -159,8 +161,6 @@ def get_dataset(
                 )
 
             dataset = dataset.map(preprocess_func, batched=True, remove_columns=column_names, **kwargs)
-            if mix_stage == 'pt' and stage == 'sft':
-                dataset["labels"] = dataset["input_ids"].copy()
 
             if data_args.tokenized_path is not None:
                 if training_args.should_save:
