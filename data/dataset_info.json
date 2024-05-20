@@ -528,6 +528,7 @@
       "chosen": "chosen",
       "rejected": "rejected"
     }
+  },
   "dpo_mix_zh": {
     "hf_hub_url": "hiyouga/DPO-En-Zh-20k",
     "subset": "zh",
