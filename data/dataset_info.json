@@ -615,6 +615,12 @@
       "prompt": "text"
     }
   },
+  "redpajama_local": {
+    "file_name": "long-llm/redpajama/train.json",
+    "columns": {
+      "prompt": "text"
+    }
+  },
   "refinedweb": {
     "hf_hub_url": "tiiuae/falcon-refinedweb",
     "columns": {
