@@ -25,6 +25,7 @@ class DatasetAttr:
     folder: Optional[str] = None
     ranking: bool = False
     formatting: Literal["alpaca", "sharegpt"] = "alpaca"
+    split: Optional[str] = None
     """ common columns """
     system: Optional[str] = None
     tools: Optional[str] = None
@@ -107,6 +108,9 @@ def get_dataset_list(data_args: "DataArguments") -> List["DatasetAttr"]:
         dataset_attr.set_attr("folder", dataset_info[name])
         dataset_attr.set_attr("ranking", dataset_info[name], default=False)
         dataset_attr.set_attr("formatting", dataset_info[name], default="alpaca")
+
+        if "split" in dataset_info[name]:
+            dataset_attr.split = dataset_info[name]["split"]
 
         if "columns" in dataset_info[name]:
             column_names = ["system", "tools", "images", "chosen", "rejected", "kto_tag"]

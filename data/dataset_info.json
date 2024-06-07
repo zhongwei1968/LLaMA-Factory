@@ -390,7 +390,8 @@
       "content_tag": "content",
       "user_tag": "user",
       "assistant_tag": "assistant"
-    }
+    },
+    "split": "train_sft"
   },
   "agent_instruct": {
     "hf_hub_url": "THUDM/AgentInstruct",
