@@ -95,7 +95,7 @@ def load_single_dataset(
             name=data_name,
             data_dir=data_dir,
             data_files=data_files,
-            split=data_args.split,
+            split=data_args.split if dataset_attr.split is None else dataset_attr.split,
             cache_dir=model_args.cache_dir,
             token=model_args.hf_hub_token,
             streaming=(data_args.streaming and (dataset_attr.load_from != "file")),
