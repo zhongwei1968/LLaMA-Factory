@@ -61,11 +61,11 @@ def check_dependencies() -> None:
     if os.environ.get("DISABLE_VERSION_CHECK", "0").lower() in ["true", "1"]:
         logger.warning("Version checking has been disabled, may lead to unexpected behaviors.")
     else:
-        require_version("transformers>=4.37.2", "To fix: pip install transformers>=4.37.2")
-        require_version("datasets>=2.14.3", "To fix: pip install datasets>=2.14.3")
-        require_version("accelerate>=0.27.2", "To fix: pip install accelerate>=0.27.2")
-        require_version("peft>=0.10.0", "To fix: pip install peft>=0.10.0")
-        require_version("trl>=0.8.1", "To fix: pip install trl>=0.8.1")
+        require_version("transformers>=4.41.2", "To fix: pip install transformers>=4.41.2")
+        require_version("datasets>=2.16.0", "To fix: pip install datasets>=2.16.0")
+        require_version("accelerate>=0.30.1", "To fix: pip install accelerate>=0.30.1")
+        require_version("peft>=0.11.1", "To fix: pip install peft>=0.11.1")
+        require_version("trl>=0.8.6", "To fix: pip install trl>=0.8.6")
 
 
 def count_parameters(model: torch.nn.Module) -> Tuple[int, int]:
@@ -165,12 +165,14 @@ def get_current_device() -> torch.device:
 
 def get_device_count() -> int:
     r"""
-    Gets the number of available GPU devices.
+    Gets the number of available GPU or NPU devices.
     """
-    if not torch.cuda.is_available():
+    if is_torch_npu_available():
+        return torch.npu.device_count()
+    elif is_torch_cuda_available():
+        return torch.cuda.device_count()
+    else:
         return 0
-
-    return torch.cuda.device_count()
 
 
 def get_logits_processor() -> "LogitsProcessorList":
@@ -194,6 +196,13 @@ def infer_optim_dtype(model_dtype: torch.dtype) -> torch.dtype:
         return torch.float32
 
 
+def is_gpu_or_npu_available() -> bool:
+    r"""
+    Checks if the GPU or NPU is available.
+    """
+    return is_torch_npu_available() or is_torch_cuda_available()
+
+
 def has_tokenized_data(path: os.PathLike) -> bool:
     r"""
     Checks if the path has a tokenized dataset.
@@ -203,12 +212,17 @@ def has_tokenized_data(path: os.PathLike) -> bool:
 
 def torch_gc() -> None:
     r"""
-    Collects GPU memory.
+    Collects GPU or NPU memory.
     """
     gc.collect()
-    if torch.cuda.is_available():
+    if is_torch_xpu_available():
+        torch.xpu.empty_cache()
+    elif is_torch_npu_available():
+        torch.npu.empty_cache()
+    elif is_torch_mps_available():
+        torch.mps.empty_cache()
+    elif is_torch_cuda_available():
         torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
 
 
 def try_download_model_from_ms(model_args: "ModelArguments") -> str:

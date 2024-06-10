@@ -24,12 +24,7 @@ class FreezeArguments:
             "help": (
                 "Name(s) of trainable modules for freeze (partial-parameter) fine-tuning. "
                 "Use commas to separate multiple modules. "
-                "Use `all` to specify all the available modules. "
-                "LLaMA choices: [`mlp`, `self_attn`], "
-                "BLOOM & Falcon & ChatGLM choices: [`mlp`, `self_attention`], "
-                "Qwen choices: [`mlp`, `attn`], "
-                "InternLM2 choices: [`feed_forward`, `attention`], "
-                "Others choices: the same as LLaMA."
+                "Use `all` to specify all the available modules."
             )
         },
     )
@@ -79,13 +74,7 @@ class LoraArguments:
             "help": (
                 "Name(s) of target modules to apply LoRA. "
                 "Use commas to separate multiple modules. "
-                "Use `all` to specify all the linear modules. "
-                "LLaMA choices: [`q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`], "
-                "BLOOM & Falcon & ChatGLM choices: [`query_key_value`, `dense`, `dense_h_to_4h`, `dense_4h_to_h`], "
-                "Baichuan choices: [`W_pack`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`], "
-                "Qwen choices: [`c_attn`, `attn.c_proj`, `w1`, `w2`, `mlp.c_proj`], "
-                "InternLM2 choices: [`wqkv`, `wo`, `w1`, `w2`, `w3`], "
-                "Others choices: the same as LLaMA."
+                "Use `all` to specify all the linear modules."
             )
         },
     )
@@ -114,28 +103,24 @@ class LoraArguments:
 @dataclass
 class RLHFArguments:
     r"""
-    Arguments pertaining to the PPO and DPO training.
+    Arguments pertaining to the PPO, DPO and KTO training.
     """
 
-    dpo_beta: float = field(
+    pref_beta: float = field(
         default=0.1,
-        metadata={"help": "The beta parameter for the DPO loss."},
+        metadata={"help": "The beta parameter in the preference loss."},
     )
-    dpo_loss: Literal["sigmoid", "hinge", "ipo", "kto_pair"] = field(
+    pref_ftx: float = field(
+        default=0.0,
+        metadata={"help": "The supervised fine-tuning loss coefficient in DPO training."},
+    )
+    pref_loss: Literal["sigmoid", "hinge", "ipo", "kto_pair", "orpo", "simpo"] = field(
         default="sigmoid",
         metadata={"help": "The type of DPO loss to use."},
     )
     dpo_label_smoothing: float = field(
         default=0.0,
         metadata={"help": "The robust DPO label smoothing parameter in cDPO that should be between 0 and 0.5."},
-    )
-    dpo_ftx: float = field(
-        default=0.0,
-        metadata={"help": "The supervised fine-tuning loss coefficient in DPO training."},
-    )
-    kto_beta: float = field(
-        default=0.1,
-        metadata={"help": "The beta parameter for the KTO loss."},
     )
     kto_chosen_weight: float = field(
         default=1.0,
@@ -145,13 +130,9 @@ class RLHFArguments:
         default=1.0,
         metadata={"help": "The weight factor of the undesirable losses in KTO training."},
     )
-    kto_ftx: float = field(
-        default=0.0,
-        metadata={"help": "The supervised fine-tuning loss coefficient in KTO training."},
-    )
-    orpo_beta: float = field(
-        default=0.1,
-        metadata={"help": "The beta (lambda) parameter in the ORPO loss representing the weight of the SFT loss."},
+    simpo_gamma: float = field(
+        default=0.5,
+        metadata={"help": "The target reward margin term in SimPO loss."},
     )
     ppo_buffer_size: int = field(
         default=1,
@@ -307,7 +288,7 @@ class FinetuningArguments(FreezeArguments, LoraArguments, RLHFArguments, GaloreA
         default=False,
         metadata={"help": "Whether or not to train model in purely bf16 precision (without AMP)."},
     )
-    stage: Literal["pt", "sft", "rm", "ppo", "dpo", "kto", "orpo"] = field(
+    stage: Literal["pt", "sft", "rm", "ppo", "dpo", "kto"] = field(
         default="sft",
         metadata={"help": "Which stage will be performed in training."},
     )
@@ -318,6 +299,14 @@ class FinetuningArguments(FreezeArguments, LoraArguments, RLHFArguments, GaloreA
     use_llama_pro: bool = field(
         default=False,
         metadata={"help": "Whether or not to make only the parameters in the expanded blocks trainable."},
+    )
+    freeze_vision_tower: bool = field(
+        default=True,
+        metadata={"help": "Whether ot not to freeze vision tower in MLLM training."},
+    )
+    train_mm_proj_only: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to train the multimodal projector for MLLM only."},
     )
     plot_loss: bool = field(
         default=False,
@@ -336,10 +325,13 @@ class FinetuningArguments(FreezeArguments, LoraArguments, RLHFArguments, GaloreA
         self.lora_target = split_arg(self.lora_target)
         self.additional_target = split_arg(self.additional_target)
         self.galore_target = split_arg(self.galore_target)
+        self.freeze_vision_tower = self.freeze_vision_tower or self.train_mm_proj_only
 
         assert self.finetuning_type in ["lora", "freeze", "full"], "Invalid fine-tuning method."
         assert self.ref_model_quantization_bit in [None, 8, 4], "We only accept 4-bit or 8-bit quantization."
         assert self.reward_model_quantization_bit in [None, 8, 4], "We only accept 4-bit or 8-bit quantization."
+
+        self.use_ref_model = self.pref_loss not in ["orpo", "simpo"]
 
         if self.stage == "ppo" and self.reward_model is None:
             raise ValueError("`reward_model` is necessary for PPO training.")
@@ -347,17 +339,20 @@ class FinetuningArguments(FreezeArguments, LoraArguments, RLHFArguments, GaloreA
         if self.stage == "ppo" and self.reward_model_type == "lora" and self.finetuning_type != "lora":
             raise ValueError("`reward_model_type` cannot be lora for Freeze/Full PPO training.")
 
-        if self.stage == "dpo" and self.dpo_loss != "sigmoid" and self.dpo_label_smoothing > 1e-6:
+        if self.stage == "dpo" and self.pref_loss != "sigmoid" and self.dpo_label_smoothing > 1e-6:
             raise ValueError("`dpo_label_smoothing` is only valid for sigmoid loss function.")
 
         if self.use_llama_pro and self.finetuning_type == "full":
-            raise ValueError("`use_llama_pro` is only valid for the Freeze or LoRA training.")
+            raise ValueError("`use_llama_pro` is only valid for Freeze or LoRA training.")
 
-        if self.use_galore and self.finetuning_type == "lora":
-            raise ValueError("Cannot use LoRA with GaLore together.")
+        if self.finetuning_type == "lora" and (self.use_galore or self.use_badam):
+            raise ValueError("Cannot use LoRA with GaLore or BAdam together.")
 
         if self.use_galore and self.use_badam:
             raise ValueError("Cannot use GaLore with BAdam together.")
 
         if self.loraplus_lr_ratio is not None and self.finetuning_type != "lora":
-            raise ValueError("`loraplus_lr_ratio` is only valid for the LoRA training.")
+            raise ValueError("`loraplus_lr_ratio` is only valid for LoRA training.")
+
+        if self.train_mm_proj_only and self.finetuning_type != "full":
+            raise ValueError("`train_mm_proj_only` is only valid for full training.")

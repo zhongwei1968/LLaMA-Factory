@@ -8,6 +8,7 @@ import torch
 from transformers import GenerationConfig, TextIteratorStreamer
 
 from ..data import get_template_and_fix_tokenizer
+from ..extras.logging import get_logger
 from ..extras.misc import get_logits_processor
 from ..model import load_model, load_tokenizer
 from .base_engine import BaseEngine, Response
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
 
     from ..data import Template
     from ..hparams import DataArguments, FinetuningArguments, GeneratingArguments, ModelArguments
+
+
+logger = get_logger(__name__)
 
 
 class HuggingfaceEngine(BaseEngine):
@@ -55,16 +59,31 @@ class HuggingfaceEngine(BaseEngine):
         image: Optional["NDArray"] = None,
         input_kwargs: Optional[Dict[str, Any]] = {},
     ) -> Tuple[Dict[str, Any], int]:
-        if processor is not None and image is not None and "<image>" not in messages[0]["content"]:
-            messages[0]["content"] = "<image>" + messages[0]["content"]
+        if (
+            processor is not None
+            and image is not None
+            and not hasattr(processor, "image_seq_length")
+            and template.image_token not in messages[0]["content"]
+        ):  # llava-like models
+            messages[0]["content"] = template.image_token + messages[0]["content"]
 
         paired_messages = messages + [{"role": "assistant", "content": ""}]
         system = system or generating_args["default_system"]
+        pixel_values = None
         prompt_ids, _ = template.encode_oneturn(
             tokenizer=tokenizer, messages=paired_messages, system=system, tools=tools
         )
+        if processor is not None and image is not None:  # add image features
+            image_processor: "BaseImageProcessor" = getattr(processor, "image_processor")
+            batch_feature = image_processor(image, return_tensors="pt")
+            pixel_values = batch_feature.to(model.device)["pixel_values"]  # shape (B, C, H, W)
+            if hasattr(processor, "image_seq_length"):  # paligemma models
+                image_token_id = tokenizer.convert_tokens_to_ids(template.image_token)
+                prompt_ids = [image_token_id] * getattr(processor, "image_seq_length") + prompt_ids
+
         prompt_length = len(prompt_ids)
         inputs = torch.tensor([prompt_ids], device=model.device)
+        attention_mask = torch.ones_like(inputs, dtype=torch.bool)
 
         do_sample: Optional[bool] = input_kwargs.pop("do_sample", None)
         temperature: Optional[float] = input_kwargs.pop("temperature", None)
@@ -78,7 +97,7 @@ class HuggingfaceEngine(BaseEngine):
         stop: Optional[Union[str, List[str]]] = input_kwargs.pop("stop", None)
 
         if stop is not None:
-            raise ValueError("Stop parameter is not supported in Huggingface engine yet.")
+            logger.warning("Stop parameter is not supported in Huggingface engine yet.")
 
         generating_args = generating_args.copy()
         generating_args.update(
@@ -118,14 +137,13 @@ class HuggingfaceEngine(BaseEngine):
 
         gen_kwargs = dict(
             inputs=inputs,
+            attention_mask=attention_mask,
             generation_config=GenerationConfig(**generating_args),
             logits_processor=get_logits_processor(),
         )
 
-        if processor is not None and image is not None:
-            image_processor: "BaseImageProcessor" = getattr(processor, "image_processor")
-            pixel_values: "torch.Tensor" = image_processor(image, return_tensors="pt")["pixel_values"]
-            gen_kwargs["pixel_values"] = pixel_values.to(model.device)
+        if pixel_values is not None:
+            gen_kwargs["pixel_values"] = pixel_values
 
         return gen_kwargs, prompt_length
 

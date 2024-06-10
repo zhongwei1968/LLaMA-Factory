@@ -1,17 +1,19 @@
 import inspect
 import os
+import sys
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
+import numpy as np
 from datasets import load_dataset, load_from_disk
 
 from ..extras.constants import FILEEXT2TYPE
 from ..extras.logging import get_logger
 from ..extras.misc import has_tokenized_data
 from .aligner import align_dataset
+from .data_utils import merge_dataset
 from .parser import get_dataset_list
 from .preprocess import get_preprocess_and_print_func
 from .template import get_template_and_fix_tokenizer
-from .utils import merge_dataset
 
 
 if TYPE_CHECKING:
@@ -60,9 +62,9 @@ def load_single_dataset(
             raise ValueError("File {} not found.".format(local_path))
 
         if data_path is None:
-            raise ValueError("File extension must be txt, csv, json or jsonl.")
+            raise ValueError("Allowed file types: {}.".format(",".join(FILEEXT2TYPE.keys())))
     else:
-        raise NotImplementedError
+        raise NotImplementedError("Unknown load type: {}.".format(dataset_attr.load_from))
 
     if dataset_attr.load_from == "ms_hub":
         try:
@@ -105,9 +107,21 @@ def load_single_dataset(
     if data_args.streaming and (dataset_attr.load_from == "file"):  # faster than specifying streaming=True
         dataset = dataset.to_iterable_dataset()  # TODO: add num shards parameter
 
+    if dataset_attr.num_samples is not None and not data_args.streaming:
+        target_num = dataset_attr.num_samples
+        indexes = np.random.permutation(len(dataset))[:target_num]
+        target_num -= len(indexes)
+        if target_num > 0:
+            expand_indexes = np.random.choice(len(dataset), target_num)
+            indexes = np.concatenate((indexes, expand_indexes), axis=0)
+
+        assert len(indexes) == dataset_attr.num_samples, "Sample num mismatched."
+        dataset = dataset.select(indexes)
+        logger.info("Sampled {} examples from dataset {}.".format(dataset_attr.num_samples, dataset_attr))
+
     if data_args.max_samples is not None:  # truncate dataset
-        num_samples = min(data_args.max_samples, len(dataset))
-        dataset = dataset.select(range(num_samples))
+        max_samples = min(data_args.max_samples, len(dataset))
+        dataset = dataset.select(range(max_samples))
 
     return align_dataset(dataset, dataset_attr, data_args)
 
@@ -116,7 +130,7 @@ def get_dataset(
     model_args: "ModelArguments",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
-    stage: Literal["pt", "sft", "rm", "kto"],
+    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
 ) -> Union["Dataset", "IterableDataset"]:
@@ -180,4 +194,36 @@ def get_dataset(
 
         dataset = merge_dataset(all_datasets, data_args, training_args)
 
-    return dataset
+    with training_args.main_process_first(desc="pre-process dataset"):
+        preprocess_func, print_function = get_preprocess_and_print_func(
+            data_args, training_args, stage, template, tokenizer, processor
+        )
+        column_names = list(next(iter(dataset)).keys())
+        kwargs = {}
+        if not data_args.streaming:
+            kwargs = dict(
+                num_proc=data_args.preprocessing_num_workers,
+                load_from_cache_file=(not data_args.overwrite_cache),
+                desc="Running tokenizer on dataset",
+            )
+
+        dataset = dataset.map(preprocess_func, batched=True, remove_columns=column_names, **kwargs)
+
+        if data_args.tokenized_path is not None:
+            if training_args.should_save:
+                dataset.save_to_disk(data_args.tokenized_path)
+                logger.info("Tokenized dataset saved at {}.".format(data_args.tokenized_path))
+                logger.info("Please restart the training with `tokenized_path: {}`.".format(data_args.tokenized_path))
+
+            sys.exit(0)
+
+        if training_args.should_log:
+            try:
+                print_function(next(iter(dataset)))
+            except StopIteration:
+                if stage == "pt":
+                    raise RuntimeError("Cannot find sufficient samples, consider increasing dataset size.")
+                else:
+                    raise RuntimeError("Cannot find valid samples, check `data/README.md` for the data format.")
+
+        return dataset

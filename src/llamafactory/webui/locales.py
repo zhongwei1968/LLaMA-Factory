@@ -46,26 +46,15 @@ LOCALES = {
             "label": "微调方法",
         },
     },
-    "adapter_path": {
+    "checkpoint_path": {
         "en": {
-            "label": "Adapter path",
+            "label": "Checkpoint path",
         },
         "ru": {
-            "label": "Путь к адаптеру",
+            "label": "Путь контрольной точки",
         },
         "zh": {
-            "label": "适配器路径",
-        },
-    },
-    "refresh_btn": {
-        "en": {
-            "value": "Refresh adapters",
-        },
-        "ru": {
-            "value": "Обновить адаптеры",
-        },
-        "zh": {
-            "value": "刷新适配器",
+            "label": "检查点路径",
         },
     },
     "advanced_tab": {
@@ -774,52 +763,52 @@ LOCALES = {
             "label": "RLHF 参数设置",
         },
     },
-    "dpo_beta": {
+    "pref_beta": {
         "en": {
-            "label": "DPO beta",
-            "info": "Value of the beta parameter in the DPO loss.",
+            "label": "Beta value",
+            "info": "Value of the beta parameter in the loss.",
         },
         "ru": {
-            "label": "DPO бета",
-            "info": "Значение параметра бета в функции потерь DPO.",
+            "label": "Бета значение",
+            "info": "Значение параметра бета в функции потерь.",
         },
         "zh": {
-            "label": "DPO beta 参数",
-            "info": "DPO 损失函数中 beta 超参数大小。",
+            "label": "Beta 参数",
+            "info": "损失函数中 beta 超参数大小。",
         },
     },
-    "dpo_ftx": {
+    "pref_ftx": {
         "en": {
-            "label": "DPO-ftx weight",
-            "info": "The weight of SFT loss in the DPO-ftx.",
+            "label": "Ftx gamma",
+            "info": "The weight of SFT loss in the final loss.",
         },
         "ru": {
-            "label": "Вес DPO-ftx",
-            "info": "Вес функции потерь SFT в DPO-ftx.",
+            "label": "Ftx гамма",
+            "info": "Вес потери SFT в итоговой потере.",
         },
         "zh": {
-            "label": "DPO-ftx 权重",
-            "info": "DPO-ftx 中 SFT 损失的权重大小。",
+            "label": "Ftx gamma",
+            "info": "损失函数中 SFT 损失的权重大小。",
         },
     },
-    "orpo_beta": {
+    "pref_loss": {
         "en": {
-            "label": "ORPO beta",
-            "info": "Value of the beta parameter in the ORPO loss.",
+            "label": "Loss type",
+            "info": "The type of the loss function.",
         },
         "ru": {
-            "label": "ORPO бета",
-            "info": "Значение параметра бета в функции потерь ORPO.",
+            "label": "Тип потерь",
+            "info": "Тип функции потерь.",
         },
         "zh": {
-            "label": "ORPO beta 参数",
-            "info": "ORPO 损失函数中 beta 超参数大小。",
+            "label": "损失类型",
+            "info": "损失函数的类型。",
         },
     },
     "reward_model": {
         "en": {
             "label": "Reward model",
-            "info": "Adapter of the reward model for PPO training.",
+            "info": "Adapter of the reward model in PPO training.",
         },
         "ru": {
             "label": "Модель вознаграждения",
@@ -828,6 +817,34 @@ LOCALES = {
         "zh": {
             "label": "奖励模型",
             "info": "PPO 训练中奖励模型的适配器路径。",
+        },
+    },
+    "ppo_score_norm": {
+        "en": {
+            "label": "Score norm",
+            "info": "Normalizing scores in PPO training.",
+        },
+        "ru": {
+            "label": "Норма оценок",
+            "info": "Нормализация оценок в тренировке PPO.",
+        },
+        "zh": {
+            "label": "奖励模型",
+            "info": "PPO 训练中归一化奖励分数。",
+        },
+    },
+    "ppo_whiten_rewards": {
+        "en": {
+            "label": "Whiten rewards",
+            "info": "Whiten the rewards in PPO training.",
+        },
+        "ru": {
+            "label": "Белые вознаграждения",
+            "info": "Осветлите вознаграждения в обучении PPO.",
+        },
+        "zh": {
+            "label": "白化奖励",
+            "info": "PPO 训练中将奖励分数做白化处理。",
         },
     },
     "galore_tab": {
@@ -1073,6 +1090,48 @@ LOCALES = {
         "zh": {
             "label": "配置路径",
             "info": "保存训练参数的配置文件路径。",
+        },
+    },
+    "device_count": {
+        "en": {
+            "label": "Device count",
+            "info": "Number of devices available.",
+        },
+        "ru": {
+            "label": "Количество устройств",
+            "info": "Количество доступных устройств.",
+        },
+        "zh": {
+            "label": "设备数量",
+            "info": "当前可用的运算设备数。",
+        },
+    },
+    "ds_stage": {
+        "en": {
+            "label": "DeepSpeed stage",
+            "info": "DeepSpeed stage for distributed training.",
+        },
+        "ru": {
+            "label": "Этап DeepSpeed",
+            "info": "Этап DeepSpeed для распределенного обучения.",
+        },
+        "zh": {
+            "label": "DeepSpeed stage",
+            "info": "多卡训练的 DeepSpeed stage。",
+        },
+    },
+    "ds_offload": {
+        "en": {
+            "label": "Enable offload",
+            "info": "Enable DeepSpeed offload (slow down training).",
+        },
+        "ru": {
+            "label": "Включить выгрузку",
+            "info": "включить выгрузку DeepSpeed (замедлит обучение).",
+        },
+        "zh": {
+            "label": "使用 offload",
+            "info": "使用 DeepSpeed offload（会减慢速度）。",
         },
     },
     "output_box": {
@@ -1416,6 +1475,11 @@ ALERTS = {
         "ru": "Пожалуйста, выберите адаптер.",
         "zh": "请选择适配器。",
     },
+    "err_no_output_dir": {
+        "en": "Please provide output dir.",
+        "ru": "Пожалуйста, укажите выходную директорию.",
+        "zh": "请填写输出目录。",
+    },
     "err_no_reward_model": {
         "en": "Please select a reward model.",
         "ru": "Пожалуйста, выберите модель вознаграждения.",
@@ -1441,11 +1505,6 @@ ALERTS = {
         "ru": "Обучение недоступно в демонстрационном режиме, сначала скопируйте пространство в частное.",
         "zh": "展示模式不支持训练，请先复制到私人空间。",
     },
-    "err_device_count": {
-        "en": "Multiple GPUs are not supported yet.",
-        "ru": "Пока не поддерживается множественные GPU.",
-        "zh": "尚不支持多 GPU 训练。",
-    },
     "err_tool_name": {
         "en": "Tool name not found.",
         "ru": "Имя инструмента не найдено.",
@@ -1465,6 +1524,11 @@ ALERTS = {
         "en": "CUDA environment was not detected.",
         "ru": "Среда CUDA не обнаружена.",
         "zh": "未检测到 CUDA 环境。",
+    },
+    "warn_output_dir_exists": {
+        "en": "Output dir already exists, will resume training from here.",
+        "ru": "Выходной каталог уже существует, обучение будет продолжено отсюда.",
+        "zh": "输出目录已存在，将从该断点恢复训练。",
     },
     "info_aborting": {
         "en": "Aborted, wait for terminating...",
