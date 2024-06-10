@@ -28,6 +28,8 @@ RUN pip install -e .[deepspeed,accelerate,metrics,bitsandbytes,peft,qwen]
 RUN pip install flash-attn==2.3.3 --no-build-isolation
 RUN pip uninstall transformer_engine -y
 
+COPY llama.py  /usr/local/lib/python3.10/dist-packages/unsloth/models/llama.py
+
 VOLUME [ "/root/.cache/huggingface/", "/app/data", "/app/output" ]
 EXPOSE 7860
 
