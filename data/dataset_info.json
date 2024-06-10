@@ -391,7 +391,8 @@
       "user_tag": "user",
       "assistant_tag": "assistant"
     },
-    "split": "train_sft"
+    "split": "train_sft",
+    "num_samples": 8
   },
   "agent_instruct": {
     "hf_hub_url": "THUDM/AgentInstruct",
@@ -689,7 +690,8 @@
     "file_name": "long-llm/redpajama/train.json",
     "columns": {
       "prompt": "text"
-    }
+    },
+    "num_samples": 5
   },
   "refinedweb": {
     "hf_hub_url": "tiiuae/falcon-refinedweb",

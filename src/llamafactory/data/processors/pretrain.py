@@ -33,4 +33,7 @@ def preprocess_pretrain_dataset(
             for i in range(len(result["input_ids"])):
                 result["input_ids"][i][0] = tokenizer.bos_token_id
 
+    if data_args.add_label:
+        result["labels"] = result["input_ids"].copy()
+
     return result
