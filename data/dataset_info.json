@@ -438,6 +438,36 @@
   "ruozhiba_gpt4": {
     "hf_hub_url": "hfl/ruozhiba_gpt4_turbo"
   },
+  "llava_1k_en": {
+    "hf_hub_url": "BUAADreamer/llava-en-zh-2k",
+    "subset": "en",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+  "llava_1k_zh": {
+    "hf_hub_url": "BUAADreamer/llava-en-zh-2k",
+    "subset": "zh",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
   "llava_150k_en": {
     "hf_hub_url": "BUAADreamer/llava-en-zh-300k",
     "subset": "en",
@@ -456,6 +486,20 @@
   "llava_150k_zh": {
     "hf_hub_url": "BUAADreamer/llava-en-zh-300k",
     "subset": "zh",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant"
+    }
+  },
+  "mllm_pt_demo": {
+    "hf_hub_url": "BUAADreamer/mllm_pt_demo",
     "formatting": "sharegpt",
     "columns": {
       "messages": "messages",
@@ -541,6 +585,16 @@
       "rejected": "rejected"
     }
   },
+  "ultrafeedback": {
+    "hf_hub_url": "llamafactory/ultrafeedback_binarized",
+    "ms_hub_url": "llamafactory/ultrafeedback_binarized",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
   "orca_pairs": {
     "hf_hub_url": "Intel/orca_dpo_pairs",
     "ranking": true,
@@ -596,6 +650,15 @@
       "content_tag": "content",
       "user_tag": "user",
       "assistant_tag": "assistant"
+    }
+  },
+  "ultrafeedback_kto": {
+    "hf_hub_url": "argilla/ultrafeedback-binarized-preferences-cleaned-kto",
+    "ms_hub_url": "AI-ModelScope/ultrafeedback-binarized-preferences-cleaned-kto",
+    "columns": {
+      "prompt": "prompt",
+      "response": "completion",
+      "kto_tag": "label"
     }
   },
   "wiki_demo": {
@@ -665,6 +728,18 @@
   "skypile": {
     "hf_hub_url": "Skywork/SkyPile-150B",
     "ms_hub_url": "AI-ModelScope/SkyPile-150B",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "fileweb": {
+    "hf_hub_url": "HuggingFaceFW/fineweb",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+  "fileweb_edu": {
+    "hf_hub_url": "HuggingFaceFW/fineweb-edu",
     "columns": {
       "prompt": "text"
     }
