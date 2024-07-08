@@ -171,7 +171,7 @@ def get_dataset(
             if (stage == "rm" and dataset_attr.ranking is False) or (stage != "rm" and dataset_attr.ranking is True):
                 raise ValueError("The dataset is not applicable in the current training stage.")
 
-            dataset = load_single_dataset(dataset_attr, model_args, data_args)
+            dataset = load_single_dataset(dataset_attr, model_args, data_args, training_args)
             mix_stage = 'pt' if len(dataset['response'][0]) == 0 else stage
             if mix_stage == 'pt' and stage == 'sft':
                 data_args.add_label = True
