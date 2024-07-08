@@ -768,6 +768,14 @@
       "prompt": "text"
     }
   },
+  "fineweb_edu_10BT": {
+    "hf_hub_url": "HuggingFaceFW/fineweb-edu",
+    "columns": {
+      "prompt": "text"
+    },
+    "subset": "sample-10BT",
+    "num_samples": 6
+  },
   "the_stack": {
     "hf_hub_url": "bigcode/the-stack",
     "ms_hub_url": "AI-ModelScope/the-stack",
