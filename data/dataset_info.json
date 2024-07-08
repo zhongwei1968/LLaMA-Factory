@@ -686,6 +686,13 @@
       "prompt": "text"
     }
   },
+  "sg_public_legal_20240701": {
+    "file_name": "pretrain_data/public_legal_texts_20240701-1147.json",
+    "columns": {
+      "prompt": "text"
+    }
+  },
+
   "redpajama_local": {
     "file_name": "long-llm/redpajama/train.json",
     "columns": {

@@ -87,8 +87,8 @@ def _check_extra_dependencies(
     finetuning_args: "FinetuningArguments",
     training_args: Optional["Seq2SeqTrainingArguments"] = None,
 ) -> None:
-    if model_args.use_unsloth:
-        require_version("unsloth", "Please install unsloth: https://github.com/unslothai/unsloth")
+    #if model_args.use_unsloth:
+    #    require_version("unsloth", "Please install unsloth: https://github.com/unslothai/unsloth")
 
     if model_args.mixture_of_depths is not None:
         require_version("mixture-of-depth>=1.1.6", "To fix: pip install mixture-of-depth>=1.1.6")
