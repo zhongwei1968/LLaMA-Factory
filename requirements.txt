@@ -7,6 +7,7 @@ trl>=0.8.6
 gradio>=4.0.0
 bitsandbytes==0.43.0
 pyarrow==14.0.1
+pandas>=2.0.0
 scipy
 einops
 sentencepiece
@@ -20,3 +21,4 @@ matplotlib>=3.7.0
 fire
 packaging
 pyyaml
+numpy<2.0.0

@@ -1,6 +1,24 @@
+# Copyright 2024 HuggingFace Inc. and the LlamaFactory team.
+#
+# This code is inspired by the HuggingFace's TRL library.
+# https://github.com/huggingface/trl/blob/v0.8.0/trl/trainer/ppo_trainer.py
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 import os
 import sys
+import warnings
 from types import MethodType
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -9,6 +27,8 @@ from accelerate.utils import DistributedDataParallelKwargs
 from tqdm import tqdm
 from transformers import GenerationConfig, Trainer, TrainerControl, TrainerState
 from transformers.optimization import get_scheduler
+from transformers.trainer import DEFAULT_CALLBACKS
+from transformers.trainer_callback import CallbackHandler
 from transformers.trainer_pt_utils import remove_dummy_checkpoint
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
@@ -16,9 +36,9 @@ from trl import PPOConfig, PPOTrainer
 from trl.core import PPODecorators, logprobs_from_logits
 from trl.models.utils import unwrap_model_for_generation
 
-from ...extras.callbacks import FixValueHeadModelCallback, LogCallback
 from ...extras.logging import get_logger
 from ...extras.misc import AverageMeter, count_parameters, get_current_device, get_logits_processor
+from ..callbacks import FixValueHeadModelCallback, SaveProcessorCallback
 from ..trainer_utils import create_custom_optimzer, create_custom_scheduler
 from .ppo_utils import dump_layernorm, get_rewards_from_server, replace_model, restore_layernorm
 
@@ -51,7 +71,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         training_args: "Seq2SeqTrainingArguments",
         finetuning_args: "FinetuningArguments",
         generating_args: "GeneratingArguments",
-        callbacks: List["TrainerCallback"],
+        callbacks: Optional[List["TrainerCallback"]],
         model: "AutoModelForCausalLMWithValueHead",
         reward_model: Optional["AutoModelForCausalLMWithValueHead"],
         ref_model: Optional["AutoModelForCausalLMWithValueHead"],
@@ -59,7 +79,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         processor: Optional["ProcessorMixin"],
         dataset: "Dataset",
         data_collator: "DataCollatorWithPadding",
-    ):
+    ) -> None:
         backward_batch_size = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
         ppo_config = PPOConfig(
             model_name=model_args.model_name_or_path,
@@ -81,11 +101,13 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         )
 
         # Add deepspeed config
-        ppo_config.accelerator_kwargs["kwargs_handlers"] = [
-            DistributedDataParallelKwargs(find_unused_parameters=training_args.ddp_find_unused_parameters)
-        ]
         if training_args.deepspeed_plugin is not None:
+            ppo_config.accelerator_kwargs["kwargs_handlers"] = [
+                DistributedDataParallelKwargs(find_unused_parameters=training_args.ddp_find_unused_parameters)
+            ]
             ppo_config.accelerator_kwargs["deepspeed_plugin"] = training_args.deepspeed_plugin
+            if ppo_config.log_with == "tensorboard":  # tensorboard raises error about accelerator_kwargs
+                ppo_config.log_with = None
 
         # Create optimizer and scheduler
         if training_args.max_steps > 0:
@@ -113,7 +135,6 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         self.finetuning_args = finetuning_args
         self.reward_model = reward_model
         self.current_device = get_current_device()  # patch for deepspeed training
-        self.processor = processor
 
         self.generation_config = GenerationConfig(
             pad_token_id=self.tokenizer.pad_token_id,
@@ -125,17 +146,15 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         self.control = TrainerControl()
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
-        self.log_callback, self.save_callback = callbacks[0], callbacks[1]
-        assert isinstance(self.log_callback, LogCallback) and isinstance(self.save_callback, FixValueHeadModelCallback)
-
+        callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
+        self.callback_handler = CallbackHandler(
+            callbacks, self.accelerator.unwrap_model(self.model), self.tokenizer, self.optimizer, self.lr_scheduler
+        )
         if self.args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
-        unwrapped_model: "AutoModelForCausalLMWithValueHead" = self.accelerator.unwrap_model(self.model)
-        self.is_chatglm_model = getattr(unwrapped_model.config, "model_type", None) == "chatglm"
-
-        device_type = unwrapped_model.pretrained_model.device.type
-        self.amp_context = torch.autocast(device_type, dtype=model_args.compute_dtype)
+        self.amp_context = torch.autocast(self.current_device.type)
+        warnings.simplefilter("ignore")  # remove gc warnings on ref model
 
         if finetuning_args.reward_model_type == "full":
             if self.is_deepspeed_enabled:
@@ -147,10 +166,16 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             else:
                 self.reward_model = self.accelerator.prepare_model(self.reward_model, evaluation_mode=True)
 
-        if finetuning_args.use_badam:
-            from badam import clip_grad_norm_for_sparse_tensor
+        self.add_callback(FixValueHeadModelCallback)
 
-            self.accelerator.clip_grad_norm_ = MethodType(clip_grad_norm_for_sparse_tensor, self.accelerator)
+        if processor is not None:
+            self.add_callback(SaveProcessorCallback(processor))
+
+        if finetuning_args.use_badam:
+            from badam import BAdamCallback, clip_grad_norm_old_version
+
+            self.accelerator.clip_grad_norm_ = MethodType(clip_grad_norm_old_version, self.accelerator)
+            self.add_callback(BAdamCallback)
 
     def ppo_train(self, resume_from_checkpoint: Optional[str] = None) -> None:
         r"""
@@ -184,23 +209,23 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
 
         if self.is_world_process_zero():
             logger.info("***** Running training *****")
-            logger.info("  Num examples = {}".format(num_examples))
-            logger.info("  Num Epochs = {}".format(num_train_epochs))
-            logger.info("  Instantaneous batch size per device = {}".format(self.args.per_device_train_batch_size))
+            logger.info("  Num examples = {:,}".format(num_examples))
+            logger.info("  Num Epochs = {:,}".format(num_train_epochs))
+            logger.info("  Instantaneous batch size per device = {:,}".format(self.args.per_device_train_batch_size))
             logger.info(
-                "  Total train batch size (w. parallel, buffer, distributed & accumulation) = {}".format(
+                "  Total train batch size (w. parallel, buffer, distributed & accumulation) = {:,}".format(
                     total_train_batch_size
                 )
             )
-            logger.info("  Gradient Accumulation steps = {}".format(self.args.gradient_accumulation_steps))
-            logger.info("  Num optimization epochs per batch = {}".format(self.finetuning_args.ppo_epochs))
-            logger.info("  Total training steps = {}".format(max_steps))
-            logger.info("  Number of trainable parameters = {}".format(count_parameters(self.model)[0]))
+            logger.info("  Gradient Accumulation steps = {:,}".format(self.args.gradient_accumulation_steps))
+            logger.info("  Num optimization epochs per batch = {:,}".format(self.finetuning_args.ppo_epochs))
+            logger.info("  Total training steps = {:,}".format(max_steps))
+            logger.info("  Number of trainable parameters = {:,}".format(count_parameters(self.model)[0]))
 
         dataiter = iter(self.dataloader)
         loss_meter = AverageMeter()
         reward_meter = AverageMeter()
-        self.log_callback.on_train_begin(self.args, self.state, self.control)
+        self.callback_handler.on_train_begin(self.args, self.state, self.control)
 
         for step in tqdm(range(max_steps), disable=not self.is_local_process_zero()):
             try:
@@ -238,7 +263,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
                     logger.warning("Failed to save stats due to unknown errors.")
 
             self.state.global_step += 1
-            self.log_callback.on_step_end(self.args, self.state, self.control)
+            self.callback_handler.on_step_end(self.args, self.state, self.control)
 
             if self.is_local_process_zero() and (step + 1) % self.args.logging_steps == 0:
                 logs = dict(
@@ -250,7 +275,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
                 tqdm.write(str(logs))
                 logs["step"] = step
                 self.state.log_history.append(logs)
-                self.log_callback.on_log(self.args, self.state, self.control)
+                self.callback_handler.on_log(self.args, self.state, self.control, logs)
                 loss_meter.reset()
                 reward_meter.reset()
 
@@ -258,17 +283,12 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
                 self.save_model(
                     os.path.join(self.args.output_dir, "{}-{}".format(PREFIX_CHECKPOINT_DIR, self.state.global_step))
                 )
-                self.save_callback.on_save(
-                    self.args, self.state, self.control, model=self.accelerator.unwrap_model(self.model)
-                )
+                self.callback_handler.on_save(self.args, self.state, self.control)
 
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
 
-        self.log_callback.on_train_end(self.args, self.state, self.control)
-        self.save_callback.on_train_end(
-            self.args, self.state, self.control, model=self.accelerator.unwrap_model(self.model)
-        )
+        self.callback_handler.on_train_end(self.args, self.state, self.control)
 
     def create_optimizer(
         self,
@@ -319,11 +339,11 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
                 batch[k] = v[:, start_index:]
 
         with unwrap_model_for_generation(self.model, self.accelerator) as unwrapped_model:
-            unwrapped_model = self.accelerator.unwrap_model(self.model)  # issue in trl v0.8.6
+            unwrapped_model: "AutoModelForCausalLMWithValueHead" = self.accelerator.unwrap_model(self.model)
             if self.model_args.upcast_layernorm:
                 layernorm_params = dump_layernorm(unwrapped_model)
 
-            generate_output: torch.Tensor = unwrapped_model.generate(
+            generate_output: "torch.Tensor" = unwrapped_model.generate(
                 generation_config=self.generation_config, logits_processor=get_logits_processor(), **batch
             )
             if self.model_args.upcast_layernorm:
@@ -334,12 +354,14 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
         queries, responses = [], []
         for i in range(len(query)):
             query_start_index = (query[i] != self.tokenizer.pad_token_id).nonzero()[0].item()
-            response_index = (response[i] != self.tokenizer.pad_token_id).nonzero()
+            response_indexes = (response[i] != self.tokenizer.pad_token_id).nonzero()
 
-            if len(response_index) == 0:
-                response_length = 1  # allow empty response
+            if len(response_indexes) == 0:  # allow empty response
+                response_length = 1
+            elif self.tokenizer.eos_token_id == self.tokenizer.pad_token_id:  # include eos token
+                response_length = response_indexes[-1].item() + 2
             else:
-                response_length = response_index[-1].item() + 1
+                response_length = response_indexes[-1].item() + 1
 
             queries.append(query[i, query_start_index:])  # remove padding from left
             responses.append(response[i, :response_length])  # remove padding from right
@@ -362,7 +384,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             messages = self.tokenizer.batch_decode(token_ids, skip_special_tokens=True)
             return get_rewards_from_server(self.reward_model, messages)
 
-        batch = self.prepare_model_inputs(queries, responses)
+        batch: Dict[str, "torch.Tensor"] = self.prepare_model_inputs(queries, responses)
         unwrapped_model: "AutoModelForCausalLMWithValueHead" = self.accelerator.unwrap_model(self.model)
 
         if self.finetuning_args.reward_model_type == "lora":
@@ -372,21 +394,13 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             reward_model = self.reward_model
 
         with unwrap_model_for_generation(reward_model, self.accelerator), self.amp_context:  # support bf16
-            _, _, values = reward_model(**batch, output_hidden_states=True, return_dict=True, use_cache=False)
+            _, _, values = reward_model(**batch, return_dict=True, use_cache=False)
 
         if self.finetuning_args.reward_model_type == "lora":
             replace_model(unwrapped_model, target="default")
 
-        if self.is_chatglm_model:  # assume same architecture
-            values = torch.transpose(values, 0, 1)
-
-        rewards = []
-        for i in range(values.size(0)):
-            end_indexes = (batch["input_ids"][i] != self.tokenizer.pad_token_id).nonzero()
-            end_index = end_indexes[-1].item() if len(end_indexes) else 0
-            rewards.append(values[i, end_index].float().detach().cpu())  # use fp32 type
-
-        return rewards
+        rewards = values.gather(dim=-1, index=(batch["attention_mask"].sum(dim=-1, keepdim=True) - 1))
+        return rewards.float().detach()  # use fp32 type
 
     @PPODecorators.empty_device_cache()
     def batched_forward_pass(
@@ -420,10 +434,7 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
             attention_mask = input_kwargs["attention_mask"]
 
             with self.amp_context:  # support bf16
-                logits, _, values = model(**input_kwargs)
-
-            if self.is_chatglm_model:
-                values = torch.transpose(values, 0, 1)
+                logits, _, values = model(**input_kwargs, return_dict=True, use_cache=False)
 
             logprobs = logprobs_from_logits(logits[:, :-1, :], input_ids[:, 1:])
             masks = torch.zeros_like(attention_mask)
@@ -485,8 +496,5 @@ class CustomPPOTrainer(PPOTrainer, Trainer):
                 self.model.save_checkpoint(output_dir)
 
         elif self.args.should_save:
-            self._save(output_dir)
-
-        if self.processor is not None and self.args.should_save:
-            output_dir = output_dir if output_dir is not None else self.args.output_dir
-            getattr(self.processor, "image_processor").save_pretrained(output_dir)
+            unwrapped_model: "AutoModelForCausalLMWithValueHead" = self.accelerator.unwrap_model(self.model)
+            self._save(output_dir, state_dict=unwrapped_model.state_dict())
