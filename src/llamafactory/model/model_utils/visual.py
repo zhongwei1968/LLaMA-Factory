@@ -1,8 +1,26 @@
+# Copyright 2024 HuggingFace Inc. and the LlamaFactory team.
+#
+# This code is inspired by the HuggingFace's Transformers library.
+# https://github.com/huggingface/transformers/blob/v4.40.0/src/transformers/models/llava/modeling_llava.py
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import TYPE_CHECKING, Tuple
 
 import torch
 import transformers.models
 from transformers.activations import ACT2FN
+from transformers.utils import logging
 
 from ...extras.logging import get_logger
 
@@ -14,6 +32,7 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+transformers_logger = logging.get_logger(__name__)
 
 
 class LlavaMultiModalProjectorForYiVL(torch.nn.Module):
@@ -44,7 +63,7 @@ class LlavaMultiModalProjectorForYiVL(torch.nn.Module):
             else:
                 target_dtype = self.linear_1.weight.dtype
 
-            logger.warning_once("The hidden states seems to be silently casted in float32.")
+            transformers_logger.warning_once("The hidden states seems to be silently casted in float32.")
             hidden_states = hidden_states.to(target_dtype)
 
         return hidden_states

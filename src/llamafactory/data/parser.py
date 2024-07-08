@@ -1,3 +1,17 @@
+# Copyright 2024 the LlamaFactory team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import os
 from dataclasses import dataclass
@@ -17,33 +31,33 @@ class DatasetAttr:
     Dataset attributes.
     """
 
-    """ basic configs """
+    # basic configs
     load_from: Literal["hf_hub", "ms_hub", "script", "file"]
     dataset_name: str
     formatting: Literal["alpaca", "sharegpt"] = "alpaca"
     ranking: bool = False
-    """ extra configs """
+    # extra configs
     subset: Optional[str] = None
     folder: Optional[str] = None
     split: Optional[str] = None
     num_samples: Optional[int] = None
-    """ common columns """
+    # common columns
     system: Optional[str] = None
     tools: Optional[str] = None
     images: Optional[str] = None
-    """ rlhf columns """
+    # rlhf columns
     chosen: Optional[str] = None
     rejected: Optional[str] = None
     kto_tag: Optional[str] = None
-    """ alpaca columns """
+    # alpaca columns
     prompt: Optional[str] = "instruction"
     query: Optional[str] = "input"
     response: Optional[str] = "output"
     tail: Optional[str] = None
     history: Optional[str] = None
-    """ sharegpt columns """
+    # sharegpt columns
     messages: Optional[str] = "conversations"
-    """ sharegpt tags """
+    # sharegpt tags
     role_tag: Optional[str] = "from"
     content_tag: Optional[str] = "value"
     user_tag: Optional[str] = "human"

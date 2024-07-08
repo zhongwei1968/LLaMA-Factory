@@ -1,12 +1,26 @@
-# Inspired by: https://github.com/CarperAI/trlx/blob/main/examples/summarize_rlhf/reward_model/train_reward_model_gptj.py
+# Copyright 2024 HuggingFace Inc. and the LlamaFactory team.
+#
+# This code is inspired by the HuggingFace's transformers library.
+# https://github.com/huggingface/transformers/blob/v4.40.0/examples/pytorch/summarization/run_summarization.py
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from typing import TYPE_CHECKING, List, Optional
 
 from ...data import PairwiseDataCollatorWithPadding, get_dataset, split_dataset
-from ...extras.callbacks import FixValueHeadModelCallback
-from ...extras.misc import fix_valuehead_checkpoint
 from ...extras.ploting import plot_loss
 from ...model import load_model, load_tokenizer
+from ..callbacks import fix_valuehead_checkpoint
 from ..trainer_utils import create_modelcard_and_push
 from .metric import compute_accuracy
 from .trainer import PairwiseTrainer
@@ -40,7 +54,7 @@ def run_rm(
         args=training_args,
         finetuning_args=finetuning_args,
         data_collator=data_collator,
-        callbacks=callbacks + [FixValueHeadModelCallback()],
+        callbacks=callbacks,
         compute_metrics=compute_accuracy,
         **tokenizer_module,
         **split_dataset(dataset, data_args, training_args),
@@ -52,6 +66,7 @@ def run_rm(
         trainer.save_model()
         if training_args.should_save:
             fix_valuehead_checkpoint(model, training_args.output_dir, training_args.save_safetensors)
+
         trainer.log_metrics("train", train_result.metrics)
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
