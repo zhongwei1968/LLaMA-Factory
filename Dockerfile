@@ -1,37 +1,60 @@
-FROM nvcr.io/nvidia/pytorch:24.01-py3
+# Use the NVIDIA official image with PyTorch 2.3.0
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-02.html
+FROM nvcr.io/nvidia/pytorch:24.02-py3
 
+# Define environments
+ENV MAX_JOBS=4
+ENV FLASH_ATTENTION_FORCE_BUILD=TRUE
+
+# Define installation arguments
+ARG INSTALL_BNB=true
+ARG INSTALL_VLLM=false
+ARG INSTALL_DEEPSPEED=true
+ARG INSTALL_FLASHATTN=true
+ARG PIP_INDEX=https://pypi.org/simple
+
+# Set the working directory
 WORKDIR /app
 
-COPY requirements.txt /app/
+# Install the requirements
+COPY requirements.txt /app
+RUN pip config set global.index-url "$PIP_INDEX" && \
+    pip config set global.extra-index-url "$PIP_INDEX" && \
+    python -m pip install --upgrade pip && \
+    python -m pip install -r requirements.txt
 
-# Update and upgrade the package lists
-RUN apt-get update && apt-get upgrade -y && apt-get clean
-RUN pip install --upgrade pip
+# Rebuild flash attention
+RUN pip uninstall -y transformer-engine flash-attn && \
+    if [ "$INSTALL_FLASHATTN" == "true" ]; then \
+        pip install -U xformers==0.0.26.post1 --index-url https://download.pytorch.org/whl/cu121 &&  \
+        pip install torchvision==0.18.0 && \    
+        pip uninstall -y ninja && pip install ninja && \
+        pip install --no-cache-dir flash-attn==2.5.6 --no-build-isolation ; \
+    fi 
 
-ENV NVM_DIR /usr/local/nvm
-
-# Copy the current directory contents into the container at /app
+# Copy the rest of the application into the image
 COPY . /app
 
-# Remove the /opt/pytorch/ directory
-RUN rm -rf /opt/pytorch/
-RUN rm -rf /usr/local/nvm/
-RUN rm -rf /workspace/
-RUN rm -rf /opt/hpcx/
+# Install the LLaMA Factory
+RUN EXTRA_PACKAGES="metrics"; \
+    if [ "$INSTALL_BNB" == "true" ]; then \
+        EXTRA_PACKAGES="${EXTRA_PACKAGES},bitsandbytes"; \
+    fi; \
+    if [ "$INSTALL_VLLM" == "true" ]; then \
+        EXTRA_PACKAGES="${EXTRA_PACKAGES},vllm"; \
+    fi; \
+    if [ "$INSTALL_DEEPSPEED" == "true" ]; then \
+        EXTRA_PACKAGES="${EXTRA_PACKAGES},deepspeed"; \
+    fi; \
+    pip install -e ".[$EXTRA_PACKAGES]"
 
-RUN pip install -r requirements.txt
+# Set up volumes
+VOLUME [ "/root/.cache/huggingface", "/root/.cache/modelscope", "/app/data", "/app/output" ]
 
-# RUN pip install --upgrade --force-reinstall --no-cache-dir torch==2.2.0 triton --index-url https://download.pytorch.org/whl/cu121
-# RUN pip install "unsloth[cu121-ampere-torch220] @ git+https://github.com/unslothai/unsloth.git"
-
-RUN pip install -U xformers==0.0.24 --index-url https://download.pytorch.org/whl/cu121
-RUN pip install -e .[deepspeed,accelerate,metrics,bitsandbytes,peft,qwen]
-RUN pip install flash-attn==2.3.3 --no-build-isolation
-RUN pip uninstall transformer_engine -y
-
-# COPY llama.py  /usr/local/lib/python3.10/dist-packages/unsloth/models/llama.py
-
-VOLUME [ "/root/.cache/huggingface/", "/app/data", "/app/output" ]
+# Expose port 7860 for the LLaMA Board
+ENV GRADIO_SERVER_PORT 7860
 EXPOSE 7860
 
-CMD [ "llamafactory-cli", "webui" ]
+# Expose port 8000 for the API service
+ENV API_PORT 8000
+EXPOSE 8000
