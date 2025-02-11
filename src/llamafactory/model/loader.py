@@ -73,11 +73,10 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
             padding_side="right",
             **init_kwargs,
         )
-    except ValueError as e:  # try the fast one
-        logger.exception("Failed to load tokenizer with the provided configuration.")
+    except ValueError:  # try the fast one
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
-            use_fast=False, # set to slow
+            use_fast=True,
             padding_side="right",
             **init_kwargs,
         )
