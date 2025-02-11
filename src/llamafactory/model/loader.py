@@ -77,7 +77,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
         logger.exception("Failed to load tokenizer with the provided configuration.")
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
-            use_fast=model_args.use_fast_tokenizer,
+            use_fast=False, # set to slow
             padding_side="right",
             **init_kwargs,
         )
