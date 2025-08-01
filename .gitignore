@@ -166,3 +166,4 @@ cache/
 output/
 config/
 wandb/
+*.pt\n*.bin\n*.safetensors\n*.ckpt\nlogs/\ncheckpoints/\noutputs/
