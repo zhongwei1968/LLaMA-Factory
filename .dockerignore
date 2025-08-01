@@ -4,6 +4,7 @@
 .venv
 cache
 data
+slr_data
 docker
 saves
 hf_cache
