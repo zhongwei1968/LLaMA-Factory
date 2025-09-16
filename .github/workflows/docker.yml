@@ -1,23 +1,8 @@
 name: docker
 
 on:
+  # Manual-only workflow to avoid CI builds on push/PR
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "**/*.py"
-      - "requirements.txt"
-      - "docker/**"
-      - ".github/workflows/*.yml"
-  pull_request:
-    branches:
-      - "main"
-    paths:
-      - "**/*.py"
-      - "requirements.txt"
-      - "docker/**"
-      - ".github/workflows/*.yml"
 
 jobs:
   build:
