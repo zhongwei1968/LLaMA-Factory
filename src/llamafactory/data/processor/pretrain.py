@@ -50,6 +50,11 @@ class PretrainDatasetProcessor(DatasetProcessor):
                 for i in range(len(result["input_ids"])):
                     result["input_ids"][i][0] = self.tokenizer.bos_token_id
 
+        # For mixed SFT+PT training, optionally provide labels for PT samples
+        if getattr(self.data_args, "add_label", False):
+            # labels are a copy of input_ids for causal LM loss
+            result["labels"] = result["input_ids"].copy()
+
         return result
 
     def print_data_example(self, example: dict[str, list[int]]) -> None:

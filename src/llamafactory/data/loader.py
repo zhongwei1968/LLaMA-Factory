@@ -187,6 +187,60 @@ def _get_merged_dataset(
         return merge_dataset(list(datasets.values()), data_args, seed=training_args.seed)
 
 
+def _get_merged_preprocessed_dataset(
+    dataset_names: Optional[list[str]],
+    model_args: "ModelArguments",
+    data_args: "DataArguments",
+    training_args: "Seq2SeqTrainingArguments",
+    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+    template: "Template",
+    tokenizer: "PreTrainedTokenizer",
+    processor: Optional["ProcessorMixin"] = None,
+    is_eval: bool = False,
+) -> Optional[Union["Dataset", "IterableDataset"]]:
+    """Load, detect per-dataset stage, preprocess, then merge datasets.
+
+    Enables mixed training: when `stage == 'sft'` and a dataset has empty `_response`,
+    it is treated as pretraining (pt) and optionally labeled for SFT collator.
+    """
+    if dataset_names is None:
+        return None
+
+    all_datasets: list[Union["Dataset", "IterableDataset"]] = []
+    for dataset_attr in get_dataset_list(dataset_names, data_args.dataset_dir):
+        if (stage == "rm" and dataset_attr.ranking is False) or (stage != "rm" and dataset_attr.ranking is True):
+            raise ValueError("The dataset is not applicable in the current training stage.")
+
+        dataset = _load_single_dataset(dataset_attr, model_args, data_args, training_args)
+
+        # Detect pretrain-style dataset after alignment: empty _response indicates PT
+        # NOTE: we have already aligned the dataset in `_load_single_dataset`.
+        try:
+            first = next(iter(dataset))
+            is_pt_like = isinstance(first.get("_response", None), list) and len(first.get("_response", [])) == 0
+        except StopIteration:
+            is_pt_like = False
+
+        mix_stage: Literal["pt", "sft", "rm", "ppo", "kto"] = "pt" if (stage == "sft" and is_pt_like) else stage
+
+        # For mixed SFT+PT, add labels for PT samples so SFT collator can compute loss
+        orig_add_label = getattr(data_args, "add_label", False)
+        if mix_stage == "pt" and stage == "sft":
+            data_args.add_label = True  # type: ignore[attr-defined]
+
+        try:
+            preprocessed = _get_preprocessed_dataset(
+                dataset, data_args, training_args, mix_stage, template, tokenizer, processor, is_eval=is_eval
+            )
+        finally:
+            # restore user setting
+            data_args.add_label = orig_add_label  # type: ignore[attr-defined]
+
+        all_datasets.append(preprocessed)
+
+    return merge_dataset(all_datasets, data_args, seed=training_args.seed)
+
+
 def _get_dataset_processor(
     data_args: "DataArguments",
     stage: Literal["pt", "sft", "rm", "ppo", "kto"],
@@ -301,7 +355,19 @@ def get_dataset(
 
     # Load and preprocess dataset
     with training_args.main_process_first(desc="load dataset", local=(not data_args.data_shared_file_system)):
-        dataset = _get_merged_dataset(data_args.dataset, model_args, data_args, training_args, stage)
+        # For training dataset, preprocess per-dataset to support mixed SFT+PT
+        dataset = _get_merged_preprocessed_dataset(
+            data_args.dataset,
+            model_args,
+            data_args,
+            training_args,
+            stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=False,
+        )
+        # For eval dataset, keep original behavior (optionally evaluate each dataset separately)
         eval_dataset = _get_merged_dataset(
             data_args.eval_dataset,
             model_args,
@@ -312,9 +378,7 @@ def get_dataset(
         )
 
     with training_args.main_process_first(desc="pre-process dataset", local=(not data_args.data_shared_file_system)):
-        dataset = _get_preprocessed_dataset(
-            dataset, data_args, training_args, stage, template, tokenizer, processor, is_eval=False
-        )
+        # training dataset has been preprocessed already to support mixed SFT+PT
         if isinstance(eval_dataset, dict):
             for eval_name, eval_data in eval_dataset.items():
                 eval_dataset[eval_name] = _get_preprocessed_dataset(
