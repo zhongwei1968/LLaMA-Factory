@@ -98,4 +98,5 @@ def run_pt(
         trainer.save_metrics("eval", metrics)
 
     # Create model card
-    create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)
+    if not finetuning_args.skip_model_card:
+        create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)
