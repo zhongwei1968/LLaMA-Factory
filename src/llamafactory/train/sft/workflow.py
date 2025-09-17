@@ -132,5 +132,4 @@ def run_sft(
         trainer.save_predictions(dataset_module["eval_dataset"], predict_results, generating_args.skip_special_tokens)
 
     # Create model card
-    if not finetuning_args.skip_model_card:
-        create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)
+    create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)

@@ -95,5 +95,4 @@ def run_rm(
         trainer.save_predictions(predict_results)
 
     # Create model card
-    if not finetuning_args.skip_model_card:
-        create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)
+    create_modelcard_and_push(trainer, model_args, data_args, training_args, finetuning_args)

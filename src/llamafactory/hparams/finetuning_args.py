@@ -513,10 +513,6 @@ class FinetuningArguments(
         default=False,
         metadata={"help": "Whether or not to compute effective tokens per second."},
     )
-    skip_model_card: bool = field(
-        default=False,
-        metadata={"help": "Disable model card generation and hub push after training."},
-    )
 
     def __post_init__(self):
         def split_arg(arg):
