@@ -24,6 +24,8 @@ from .processor_utils import DatasetProcessor
 
 @dataclass
 class PretrainDatasetProcessor(DatasetProcessor):
+    add_labels: bool = False
+
     def preprocess_dataset(self, examples: dict[str, list[Any]]) -> dict[str, list[Any]]:
         # build grouped texts with format `X1 X2 X3 ...` if packing is enabled
         eos_token = "<|end_of_text|>" if self.data_args.template == "llama3" else self.tokenizer.eos_token
@@ -51,7 +53,7 @@ class PretrainDatasetProcessor(DatasetProcessor):
                     result["input_ids"][i][0] = self.tokenizer.bos_token_id
 
         # For mixed SFT+PT training, optionally provide labels for PT samples
-        if getattr(self.data_args, "add_label", False):
+        if self.add_labels:
             # labels are a copy of input_ids for causal LM loss
             result["labels"] = result["input_ids"].copy()
 

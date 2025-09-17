@@ -223,18 +223,18 @@ def _get_merged_preprocessed_dataset(
 
         mix_stage: Literal["pt", "sft", "rm", "ppo", "kto"] = "pt" if (stage == "sft" and is_pt_like) else stage
 
-        # For mixed SFT+PT, add labels for PT samples so SFT collator can compute loss
-        orig_add_label = getattr(data_args, "add_label", False)
-        if mix_stage == "pt" and stage == "sft":
-            data_args.add_label = True  # type: ignore[attr-defined]
-
-        try:
-            preprocessed = _get_preprocessed_dataset(
-                dataset, data_args, training_args, mix_stage, template, tokenizer, processor, is_eval=is_eval
-            )
-        finally:
-            # restore user setting
-            data_args.add_label = orig_add_label  # type: ignore[attr-defined]
+        preprocessed = _get_preprocessed_dataset(
+            dataset,
+            data_args,
+            training_args,
+            mix_stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=is_eval,
+            # ensure PT-style rows gain labels when mixed into SFT stage
+            add_labels=(mix_stage == "pt" and stage == "sft"),
+        )
 
         all_datasets.append(preprocessed)
 
@@ -248,6 +248,7 @@ def _get_dataset_processor(
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"],
     do_generate: bool = False,
+    add_labels: bool = False,
 ) -> "DatasetProcessor":
     r"""Return the corresponding dataset processor."""
     if stage == "pt":
@@ -278,7 +279,11 @@ def _get_dataset_processor(
     else:
         dataset_processor_class = UnsupervisedDatasetProcessor
 
-    return dataset_processor_class(template=template, tokenizer=tokenizer, processor=processor, data_args=data_args)
+    processor_kwargs = dict(template=template, tokenizer=tokenizer, processor=processor, data_args=data_args)
+    if dataset_processor_class is PretrainDatasetProcessor:
+        processor_kwargs["add_labels"] = add_labels or getattr(data_args, "add_label", False)
+
+    return dataset_processor_class(**processor_kwargs)
 
 
 def _get_preprocessed_dataset(
@@ -290,13 +295,20 @@ def _get_preprocessed_dataset(
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
     is_eval: bool = False,
+    add_labels: bool = False,
 ) -> Optional[Union["Dataset", "IterableDataset"]]:
     r"""Preprocesses the dataset, including format checking and tokenization."""
     if dataset is None:
         return None
 
     dataset_processor = _get_dataset_processor(
-        data_args, stage, template, tokenizer, processor, do_generate=(training_args.predict_with_generate and is_eval)
+        data_args,
+        stage,
+        template,
+        tokenizer,
+        processor,
+        do_generate=(training_args.predict_with_generate and is_eval),
+        add_labels=add_labels,
     )
     column_names = list(next(iter(dataset)).keys())
     kwargs = {}
