@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 from datasets import Dataset, load_dataset, load_from_disk
@@ -46,6 +46,28 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+def _is_pretrain_style_example(example: dict[str, Any]) -> bool:
+    response = example.get("_response")
+    if not isinstance(response, list):
+        return False
+
+    if len(response) == 0:
+        return True
+
+    return all(isinstance(turn, dict) and not turn.get("content") for turn in response)
+
+
+def _should_use_pretrain_processor(dataset: Union["Dataset", "IterableDataset"]) -> bool:
+    try:
+        example = next(iter(dataset))
+    except (StopIteration, TypeError, KeyError):
+        return False
+    except Exception:  # noqa: BLE001 - best effort detection only
+        return False
+
+    return _is_pretrain_style_example(example)
 
 
 def _load_single_dataset(
@@ -241,8 +263,26 @@ def _get_preprocessed_dataset(
     if dataset is None:
         return None
 
+    effective_stage = stage
+    add_label_original: Optional[bool] = getattr(data_args, "add_label", None)
+    add_label_changed = False
+
+    if stage == "sft" and _should_use_pretrain_processor(dataset):
+        effective_stage = "pt"
+        if hasattr(data_args, "add_label") and not data_args.add_label:
+            data_args.add_label = True
+            add_label_changed = True
+        logger.info_rank0(
+            "Detected unlabeled dataset while running SFT stage. Using pre-training processor for mixed training."
+        )
+
     dataset_processor = _get_dataset_processor(
-        data_args, stage, template, tokenizer, processor, do_generate=(training_args.predict_with_generate and is_eval)
+        data_args,
+        effective_stage,
+        template,
+        tokenizer,
+        processor,
+        do_generate=(training_args.predict_with_generate and is_eval),
     )
     column_names = list(next(iter(dataset)).keys())
     kwargs = {}
@@ -253,13 +293,17 @@ def _get_preprocessed_dataset(
             desc="Running tokenizer on dataset",
         )
 
-    dataset = dataset.map(
-        dataset_processor.preprocess_dataset,
-        batched=True,
-        batch_size=data_args.preprocessing_batch_size,
-        remove_columns=column_names,
-        **kwargs,
-    )
+    try:
+        dataset = dataset.map(
+            dataset_processor.preprocess_dataset,
+            batched=True,
+            batch_size=data_args.preprocessing_batch_size,
+            remove_columns=column_names,
+            **kwargs,
+        )
+    finally:
+        if add_label_changed and add_label_original is not None:
+            data_args.add_label = add_label_original
 
     if training_args.should_log:
         try:

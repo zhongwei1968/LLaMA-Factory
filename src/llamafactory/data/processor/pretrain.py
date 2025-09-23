@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 from dataclasses import dataclass
 from itertools import chain
 from typing import Any
@@ -49,6 +50,19 @@ class PretrainDatasetProcessor(DatasetProcessor):
             if getattr(self.tokenizer, "add_bos_token", False):
                 for i in range(len(result["input_ids"])):
                     result["input_ids"][i][0] = self.tokenizer.bos_token_id
+
+        num_examples = len(result["input_ids"])
+        if self.data_args.add_label:
+            result["labels"] = deepcopy(result["input_ids"])
+
+        if "images" not in result:
+            result["images"] = [None for _ in range(num_examples)]
+        if "videos" not in result:
+            result["videos"] = [None for _ in range(num_examples)]
+        if "audios" not in result:
+            result["audios"] = [None for _ in range(num_examples)]
+        if self.data_args.packing and "position_ids" not in result:
+            result["position_ids"] = [list(range(len(ids))) for ids in result["input_ids"]]
 
         return result
 

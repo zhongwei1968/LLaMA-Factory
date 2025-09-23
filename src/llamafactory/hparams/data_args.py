@@ -55,6 +55,10 @@ class DataArguments:
         default=False,
         metadata={"help": "Whether or not to mask the history and train on the last turn only."},
     )
+    add_label: bool = field(
+        default=False,
+        metadata={"help": "Whether to duplicate inputs as labels when mixing pre-training data."},
+    )
     streaming: bool = field(
         default=False,
         metadata={"help": "Enable dataset streaming."},
