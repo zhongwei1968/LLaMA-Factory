@@ -24,6 +24,14 @@ from ..extras import logging
 from .data_utils import Role
 
 
+def _ensure_assistant_response(response: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Guarantee response list contains at least one assistant turn."""
+    if len(response) == 0:
+        return [{"role": Role.ASSISTANT.value, "content": ""}]
+
+    return response
+
+
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
     from transformers import Seq2SeqTrainingArguments
@@ -122,6 +130,8 @@ class AlpacaDatasetConverter(DatasetConverter):
         else:  # unsupervised
             response = []
 
+        response = _ensure_assistant_response(response)
+
         output = {
             "_prompt": prompt,
             "_response": response,
@@ -217,6 +227,8 @@ class SharegptDatasetConverter(DatasetConverter):
         else:  # normal example
             prompt = aligned_messages[:-1]
             response = aligned_messages[-1:]
+
+        response = _ensure_assistant_response(response)
 
         output = {
             "_prompt": prompt,
@@ -342,6 +354,8 @@ class OpenAIDatasetConverter(DatasetConverter):
         tools = example.get(self.dataset_attr.tools, "") if self.dataset_attr.tools else ""
         if isinstance(tools, dict) or isinstance(tools, list):
             tools = json.dumps(tools, ensure_ascii=False)
+
+        response = _ensure_assistant_response(response)
 
         short_system_prompt = "detailed thinking off"
         if not system:
