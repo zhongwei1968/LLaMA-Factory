@@ -17,6 +17,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+from datasets import Dataset as HFDataset
+from datasets import Sequence, Value
+
 from ..extras import logging
 from .data_utils import Role
 
@@ -417,9 +420,22 @@ def align_dataset(
         )
 
     dataset_converter = get_dataset_converter(dataset_attr.formatting, dataset_attr, data_args)
-    return dataset.map(
+    aligned_dataset = dataset.map(
         dataset_converter,
         batched=False,
         remove_columns=column_names,
         **kwargs,
     )
+
+    # Ensure chat columns share consistent schemas so heterogeneous datasets can merge cleanly.
+    if isinstance(aligned_dataset, HFDataset):
+        chat_feature = Sequence({"role": Value("string"), "content": Value("string")})
+        for column in ("_prompt", "_response"):
+            if column in aligned_dataset.column_names:
+                try:
+                    aligned_dataset = aligned_dataset.cast_column(column, chat_feature)
+                except (TypeError, ValueError):
+                    # Best-effort: leave column untouched if casting fails for custom schemas.
+                    pass
+
+    return aligned_dataset
