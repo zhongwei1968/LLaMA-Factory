@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datasets import Dataset, concatenate_datasets
+from transformers import Seq2SeqTrainingArguments
+
 from llamafactory.data import Role
-from llamafactory.data.converter import get_dataset_converter
+from llamafactory.data.converter import align_dataset, get_dataset_converter
 from llamafactory.data.parser import DatasetAttr
 from llamafactory.hparams import DataArguments
 
@@ -58,3 +61,31 @@ def test_sharegpt_converter():
         "_videos": None,
         "_audios": None,
     }
+
+
+def test_align_dataset_supports_mixed_pt_sft(tmp_path):
+    data_args = DataArguments()
+    training_args = Seq2SeqTrainingArguments(output_dir=str(tmp_path))
+
+    sft_attr = DatasetAttr(load_from="file", dataset_name="sft", formatting="alpaca")
+    pt_attr = DatasetAttr(load_from="file", dataset_name="pt", formatting="alpaca")
+    pt_attr.response = None
+
+    sft_ds = Dataset.from_list(
+        [
+            {"instruction": "summarise", "input": "story", "output": "summary"},
+        ]
+    )
+    pt_ds = Dataset.from_list(
+        [
+            {"instruction": "complete", "input": "text"},
+        ]
+    )
+
+    sft_aligned = align_dataset(sft_ds, sft_attr, data_args, training_args)
+    pt_aligned = align_dataset(pt_ds, pt_attr, data_args, training_args)
+
+    assert pt_aligned[0]["_response"] == [{"role": Role.ASSISTANT.value, "content": ""}]
+    assert sft_aligned.features["_response"] == pt_aligned.features["_response"]
+
+    concatenate_datasets([sft_aligned, pt_aligned])
