@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+from itertools import islice
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
@@ -60,14 +61,52 @@ def _is_pretrain_style_example(example: dict[str, Any]) -> bool:
 
 
 def _should_use_pretrain_processor(dataset: Union["Dataset", "IterableDataset"]) -> bool:
+    max_samples = 32
+
     try:
-        example = next(iter(dataset))
-    except (StopIteration, TypeError, KeyError):
+        dataset_len = len(dataset)  # type: ignore[arg-type]
+    except TypeError:
+        dataset_len = None
+    except Exception:  # noqa: BLE001 - best effort detection only
+        dataset_len = None
+
+    checked = False
+    if dataset_len is not None:
+        if dataset_len == 0:
+            return False
+
+        stride = max(1, dataset_len // max_samples)
+        indices = list(range(0, dataset_len, stride))[:max_samples]
+        if indices[-1] != dataset_len - 1:
+            indices.append(dataset_len - 1)
+
+        for index in indices:
+            try:
+                example = dataset[index]  # type: ignore[index]
+            except (KeyError, IndexError, TypeError):
+                return False
+            except Exception:  # noqa: BLE001 - best effort detection only
+                return False
+
+            checked = True
+            if not _is_pretrain_style_example(example):
+                return False
+
+        return checked
+
+    try:
+        iterator = iter(dataset)
+    except (TypeError, KeyError):
         return False
     except Exception:  # noqa: BLE001 - best effort detection only
         return False
 
-    return _is_pretrain_style_example(example)
+    for example in islice(iterator, max_samples):
+        checked = True
+        if not _is_pretrain_style_example(example):
+            return False
+
+    return checked
 
 
 def _load_single_dataset(
