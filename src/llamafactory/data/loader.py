@@ -344,7 +344,7 @@ def _get_preprocessed_dataset(
         if add_label_changed and add_label_original is not None:
             data_args.add_label = add_label_original
 
-    if training_args.should_log:
+    if training_args.should_log and os.getenv("PRINT_SAMPLE", "true") == "true":
         try:
             print("eval example:" if is_eval else "training example:")
             dataset_processor.print_data_example(next(iter(dataset)))
