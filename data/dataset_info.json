@@ -651,6 +651,12 @@
       "prompt": "text"
     }
   },
+  "legal_text_demo": {
+    "file_name": "legal-texts-20240605-100.json",
+    "columns": {
+      "prompt": "text"
+    }
+  },
   "refinedweb": {
     "hf_hub_url": "tiiuae/falcon-refinedweb",
     "columns": {
