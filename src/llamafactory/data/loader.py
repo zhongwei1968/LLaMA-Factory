@@ -274,6 +274,75 @@ def _get_preprocessed_dataset(
     return dataset
 
 
+def _infer_dataset_stage(
+    dataset: Union["Dataset", "IterableDataset"],
+    default_stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+) -> Literal["pt", "sft", "rm", "ppo", "kto"]:
+    """Infer the stage of a dataset by peeking the first sample.
+
+    Currently only adjusts when default stage is SFT and the response is empty,
+    which indicates a pre-training style shard.
+    """
+    if default_stage != "sft":
+        return default_stage
+
+    try:
+        sample = next(iter(dataset))
+    except StopIteration:
+        return default_stage
+    except Exception as err:  # pragma: no cover - defensive fallback for exotic datasets
+        logger.warning_rank0_once(f"Failed to infer dataset stage due to: {err}. Treat it as {default_stage}.")
+        return default_stage
+
+    response = sample.get("_response")
+    if isinstance(response, list) and len(response) == 0:
+        return "pt"
+
+    return default_stage
+
+
+def _preprocess_dataset_collection(
+    datasets: Optional[dict[str, Union["Dataset", "IterableDataset"]]],
+    data_args: "DataArguments",
+    training_args: "Seq2SeqTrainingArguments",
+    stage: Literal["pt", "sft", "rm", "ppo", "kto"],
+    template: "Template",
+    tokenizer: "PreTrainedTokenizer",
+    processor: Optional["ProcessorMixin"],
+    is_eval: bool,
+    keep_separate: bool,
+) -> Optional[Union[dict[str, Union["Dataset", "IterableDataset"]], "Dataset", "IterableDataset"]]:
+    if datasets is None or len(datasets) == 0:
+        return None
+
+    processed: dict[str, Union["Dataset", "IterableDataset"]] = {}
+    for name, raw_dataset in datasets.items():
+        resolved_stage = _infer_dataset_stage(raw_dataset, stage)
+        if stage == "sft" and resolved_stage == "pt" and not data_args.add_label:
+            logger.info_rank0(f"Dataset {name} has empty responses. Enable PT+SFT mixed training.")
+            data_args.add_label = True
+
+        processed[name] = _get_preprocessed_dataset(
+            raw_dataset,
+            data_args,
+            training_args,
+            resolved_stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=is_eval,
+        )
+
+    if keep_separate:
+        return processed
+
+    merged = [dataset for dataset in processed.values() if dataset is not None]
+    if len(merged) == 0:
+        return None
+
+    return merge_dataset(merged, data_args, seed=training_args.seed)
+
+
 def get_dataset(
     template: "Template",
     model_args: "ModelArguments",
@@ -301,29 +370,46 @@ def get_dataset(
 
     # Load and preprocess dataset
     with training_args.main_process_first(desc="load dataset", local=(not data_args.data_shared_file_system)):
-        dataset = _get_merged_dataset(data_args.dataset, model_args, data_args, training_args, stage)
+        dataset = _get_merged_dataset(
+            data_args.dataset,
+            model_args,
+            data_args,
+            training_args,
+            stage,
+            return_dict=True,
+        )
         eval_dataset = _get_merged_dataset(
             data_args.eval_dataset,
             model_args,
             data_args,
             training_args,
             stage,
-            return_dict=data_args.eval_on_each_dataset,
+            return_dict=True,
         )
 
     with training_args.main_process_first(desc="pre-process dataset", local=(not data_args.data_shared_file_system)):
-        dataset = _get_preprocessed_dataset(
-            dataset, data_args, training_args, stage, template, tokenizer, processor, is_eval=False
+        dataset = _preprocess_dataset_collection(
+            dataset,
+            data_args,
+            training_args,
+            stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=False,
+            keep_separate=False,
         )
-        if isinstance(eval_dataset, dict):
-            for eval_name, eval_data in eval_dataset.items():
-                eval_dataset[eval_name] = _get_preprocessed_dataset(
-                    eval_data, data_args, training_args, stage, template, tokenizer, processor, is_eval=True
-                )
-        else:
-            eval_dataset = _get_preprocessed_dataset(
-                eval_dataset, data_args, training_args, stage, template, tokenizer, processor, is_eval=True
-            )
+        eval_dataset = _preprocess_dataset_collection(
+            eval_dataset,
+            data_args,
+            training_args,
+            stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=True,
+            keep_separate=data_args.eval_on_each_dataset,
+        )
 
         dataset_dict = split_dataset(dataset, eval_dataset, data_args, seed=training_args.seed)
         if data_args.tokenized_path is not None:  # save tokenized dataset to disk

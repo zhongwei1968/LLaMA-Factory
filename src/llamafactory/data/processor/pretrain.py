@@ -40,7 +40,7 @@ class PretrainDatasetProcessor(DatasetProcessor):
             tokenized_examples = self.tokenizer(text_examples, add_special_tokens=False)
             concatenated_examples = {k: list(chain(*tokenized_examples[k])) for k in tokenized_examples.keys()}
             total_length = len(concatenated_examples[list(concatenated_examples.keys())[0]])
-            block_size = self.data_args.cutoff_len
+            block_size = self.data_args.cutoff_len + 1
             total_length = (total_length // block_size) * block_size
             result = {
                 k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
@@ -49,6 +49,24 @@ class PretrainDatasetProcessor(DatasetProcessor):
             if getattr(self.tokenizer, "add_bos_token", False):
                 for i in range(len(result["input_ids"])):
                     result["input_ids"][i][0] = self.tokenizer.bos_token_id
+
+        if self.data_args.add_label:
+            # Duplicate `input_ids` so PT shards can provide labels when mixed with SFT data.
+            result["labels"] = [ids[:] for ids in result["input_ids"]]
+
+        if self.data_args.packing:
+            # Align columns with packed SFT examples when datasets are merged.
+            attention_mask = []
+            position_ids = []
+            for ids in result["input_ids"]:
+                if self.data_args.neat_packing:
+                    attention_mask.append(list(range(1, len(ids) + 1)))
+                else:
+                    attention_mask.append([1] * len(ids))
+                position_ids.append(list(range(len(ids))))
+
+            result["attention_mask"] = attention_mask
+            result["position_ids"] = position_ids
 
         return result
 
