@@ -261,7 +261,7 @@ def _get_preprocessed_dataset(
         **kwargs,
     )
 
-    if training_args.should_log:
+    if training_args.should_log & os.getenv("PRINT_SAMPLE", "false") == "true":
         try:
             print("eval example:" if is_eval else "training example:")
             dataset_processor.print_data_example(next(iter(dataset)))
