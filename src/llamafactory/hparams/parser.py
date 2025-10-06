@@ -89,10 +89,19 @@ def _parse_args(
 
 
 def _set_transformers_logging() -> None:
-    if os.getenv("LLAMAFACTORY_VERBOSITY", "INFO") in ["DEBUG", "INFO"]:
-        transformers.utils.logging.set_verbosity_info()
-        transformers.utils.logging.enable_default_handler()
-        transformers.utils.logging.enable_explicit_format()
+    env_verbosity = os.getenv("LLAMAFACTORY_VERBOSITY")
+    verbosity = env_verbosity.upper() if env_verbosity else "WARNING"
+    set_level = {
+        "DEBUG": transformers.utils.logging.set_verbosity_debug,
+        "INFO": transformers.utils.logging.set_verbosity_info,
+        "WARNING": transformers.utils.logging.set_verbosity_warning,
+        "ERROR": transformers.utils.logging.set_verbosity_error,
+        "CRITICAL": transformers.utils.logging.set_verbosity_error,
+    }.get(verbosity, transformers.utils.logging.set_verbosity_warning)
+
+    set_level()
+    transformers.utils.logging.enable_default_handler()
+    transformers.utils.logging.enable_explicit_format()
 
 
 def _set_env_vars() -> None:
