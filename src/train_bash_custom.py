@@ -20,10 +20,10 @@ elif run_com=='accelerate':
     print("running accelerate", flush=True)
     config_file = "/app/examples/accelerate/single_config_8.yaml"
     if 'gemma' in TRAIN_ARGS or 'gemma' in TRAIN_ARGS_ADD:
-        config_file = "/app/examples/accelerate/fsdp_config_gemma3_2.yaml"
+        config_file = "/app/examples/accelerate/fsdp_config_gemma3_8.yaml"
 
     subprocess.run(
-        ["accelerate", "launch", "--config_file", "/app/examples/accelerate/single_config_8.yaml",
+        ["accelerate", "launch", "--config_file", config_file,
          "/app/src/train.py"]+
         TRAIN_ARGS.split()+
         TRAIN_ARGS_ADD.split(),
