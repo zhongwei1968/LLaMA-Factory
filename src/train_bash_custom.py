@@ -18,6 +18,10 @@ if run_com=='deepspeed':
         )
 elif run_com=='accelerate':
     print("running accelerate", flush=True)
+    config_file = "/app/examples/accelerate/single_config_8.yaml"
+    if 'gemma' in TRAIN_ARGS or 'gemma' in TRAIN_ARGS_ADD:
+        config_file = "/app/examples/accelerate/fsdp_config_gemma3_2.yaml"
+
     subprocess.run(
         ["accelerate", "launch", "--config_file", "/app/examples/accelerate/single_config_8.yaml",
          "/app/src/train.py"]+
