@@ -1,4 +1,5 @@
 import os, subprocess
+import shlex
 
 TRAIN_ARGS = os.getenv('TRAIN_ARGS')
 TRAIN_ARGS_ADD = os.getenv('TRAIN_ARGS_ADD')
@@ -12,8 +13,8 @@ if run_com=='deepspeed':
     subprocess.run(
         ["deepspeed", "--num_gpus", NUM_GPUS, "/app/src/train.py"]+
         ["--deepspeed", "/app/examples/deepspeed/ds_z3_config.json"]+
-        TRAIN_ARGS.split()+
-        TRAIN_ARGS_ADD.split(),
+        shlex.split(TRAIN_ARGS) +
+        shlex.split(TRAIN_ARGS_ADD),
         check=True
         )
 elif run_com=='accelerate':
@@ -22,8 +23,8 @@ elif run_com=='accelerate':
     subprocess.run(
         ["accelerate", "launch", "--config_file", config_file,
          "/app/src/train.py"]+
-        TRAIN_ARGS.split()+
-        TRAIN_ARGS_ADD.split(),
+        shlex.split(TRAIN_ARGS) +
+        shlex.split(TRAIN_ARGS_ADD),
         check=True
         )
 elif run_com=='torchrun':
@@ -31,14 +32,14 @@ elif run_com=='torchrun':
     nproc_per_node = '--nproc_per_node=' + str(NUM_GPUS)
     subprocess.run(
         ["torchrun", nproc_per_node, "/app/src/train.py"]+
-        TRAIN_ARGS.split()+
-        TRAIN_ARGS_ADD.split(),
+        shlex.split(TRAIN_ARGS) +
+        shlex.split(TRAIN_ARGS_ADD),
         check=True
         )
 else:
     subprocess.run(
         ["python", "src/train.py"]+
-        TRAIN_ARGS.split()+
-        TRAIN_ARGS_ADD.split(),
+        shlex.split(TRAIN_ARGS) +
+        shlex.split(TRAIN_ARGS_ADD),
         check=True
         )
