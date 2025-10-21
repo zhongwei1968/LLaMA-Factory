@@ -40,7 +40,7 @@ def add_z3_leaf_module(model: "PreTrainedModel") -> None:
 
     model_type = getattr(model.config, "model_type", None)
     text_config = getattr(model.config, "text_config", None)
-    text_architectures = getattr(text_config, "architectures", None)
+    text_model_type = getattr(text_config, "model_type", None)
 
     if model_type == "dbrx":
         from transformers.models.dbrx.modeling_dbrx import DbrxFFN
@@ -54,6 +54,11 @@ def add_z3_leaf_module(model: "PreTrainedModel") -> None:
     if model_type == "deepseek_v3" or model_type == "kimi_vl":
         # deepseek v3 and kimi vl use custom code
         _set_z3_leaf_modules(model, ["DeepseekV3MoE"])
+
+    if model_type == "ernie4_5_moe":
+        from transformers.models.ernie4_5_moe.modeling_ernie4_5_moe import Ernie4_5_MoeSparseMoeBlock
+
+        _set_z3_leaf_modules(model, [Ernie4_5_MoeSparseMoeBlock])
 
     if model_type == "granitemoe":
         from transformers.models.granitemoe.modeling_granitemoe import GraniteMoeMoE
@@ -105,10 +110,20 @@ def add_z3_leaf_module(model: "PreTrainedModel") -> None:
 
         _set_z3_leaf_modules(model, [Qwen2MoeSparseMoeBlock])
 
-    if model_type == "qwen3_moe" or text_architectures == "Qwen3MoeForCausalLM":
+    if model_type == "qwen3_moe" or text_model_type == "qwen3_moe":  # internvl 3.5
         from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
         _set_z3_leaf_modules(model, [Qwen3MoeSparseMoeBlock])
+
+    if model_type == "qwen3_vl_moe":
+        from transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe import Qwen3VLMoeTextSparseMoeBlock
+
+        _set_z3_leaf_modules(model, [Qwen3VLMoeTextSparseMoeBlock])
+
+    if model_type == "qwen3_omni_moe":
+        from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import Qwen3OmniMoeThinkerTextSparseMoeBlock
+
+        _set_z3_leaf_modules(model, [Qwen3OmniMoeThinkerTextSparseMoeBlock])
 
 
 def configure_moe(config: "PretrainedConfig", model_args: "ModelArguments", is_trainable: bool) -> None:
@@ -120,6 +135,7 @@ def configure_moe(config: "PretrainedConfig", model_args: "ModelArguments", is_t
 
     if model_type in [
         "dbrx",
+        "ernie4_5_moe",
         "granitemoe",
         "jamba",
         "jetmoe",
@@ -138,7 +154,17 @@ def configure_moe(config: "PretrainedConfig", model_args: "ModelArguments", is_t
     ]:
         setattr(text_config, "output_router_logits", True)
 
-    if model_type in ["granitemoe", "jamba", "llama4", "mixtral", "olmoe", "phimoe", "qwen2_moe", "qwen3_moe"]:
+    if model_type in [
+        "ernie4_5_moe",
+        "granitemoe",
+        "jamba",
+        "llama4",
+        "mixtral",
+        "olmoe",
+        "phimoe",
+        "qwen2_moe",
+        "qwen3_moe",
+    ]:
         setattr(config, "router_aux_loss_coef", model_args.moe_aux_loss_coef)
 
     elif text_config and getattr(text_config, "model_type", None) in ["qwen3_moe"]:
