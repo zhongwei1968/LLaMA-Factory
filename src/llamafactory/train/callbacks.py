@@ -371,6 +371,18 @@ class ReporterCallback(TrainerCallback):
                 }
             )
 
+        if "trackio" in args.report_to:
+            import trackio
+
+            trackio.config.update(
+                {
+                    "model_args": self.model_args.to_dict(),
+                    "data_args": self.data_args.to_dict(),
+                    "finetuning_args": self.finetuning_args.to_dict(),
+                    "generating_args": self.generating_args.to_dict(),
+                }
+            )
+
         if self.finetuning_args.use_swanlab:
             import swanlab  # type: ignore
 
