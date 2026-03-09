@@ -475,7 +475,7 @@ huggingface-cli login
 
 | 必需项        | 至少     | 推荐      |
 | ------------ | ------- | --------- |
-| python       | 3.9     | 3.10      |
+| python       | 3.11     | >=3.11   |
 | torch        | 2.0.0   | 2.6.0     |
 | torchvision  | 0.15.0  | 0.21.0    |
 | transformers | 4.49.0  | 4.50.0    |
