@@ -69,6 +69,8 @@ MCA_SUPPORTED_MODELS = {
     "qwen3",
     "qwen3_moe",
     "qwen3_next",
+    "qwen3_5",
+    "qwen3_5_moe",
 }
 
 METHODS = ["full", "freeze", "lora", "oft"]

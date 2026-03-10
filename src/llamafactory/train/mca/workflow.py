@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import functools
+import json
+import os
 from collections.abc import Sequence
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Optional
@@ -77,20 +79,25 @@ def _data_collator_wrapper(data_collator: Any):
 
 def _check_model_support(model_args: "ModelArguments"):
     from transformers import AutoConfig as HfAutoConfig
+    if os.path.exists(os.path.join(model_args.model_name_or_path, "mca_config.json")): # load from mcore ckpt
+        mca_config = json.load(open(os.path.join(model_args.model_name_or_path, "mca_config.json")))
+        model_type = mca_config.get("hf_model_type", None)
+    else:
+        config = HfAutoConfig.from_pretrained(
+            model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code
+        )
+        model_type = config.model_type
 
-    config = HfAutoConfig.from_pretrained(
-        model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code
-    )
-    if config.model_type not in MCA_SUPPORTED_MODELS:
+    if model_type not in MCA_SUPPORTED_MODELS:
         raise ValueError(
-            f"Model {config.model_type} is not supported by mcore_adapter."
+            f"Model {model_type} is not supported by mcore_adapter."
             "You can try to upgrade mcore_adapter to the latest version for more supported models."
         )
 
 
 def _freeze_model_parameters(model: Any, finetuning_args: "FinetuningArguments"):
     """Freeze model parameters for qwen_vl series models based on finetuning arguments."""
-    if getattr(model.config, "hf_model_type", None) not in ["qwen2_vl", "qwen2_5_vl", "qwen3_vl", "qwen3_vl_moe"]:
+    if getattr(model.config, "hf_model_type", None) not in ["qwen2_vl", "qwen2_5_vl", "qwen3_vl", "qwen3_vl_moe", "qwen3_5", "qwen3_5_moe"]:
         return
 
     params_to_freeze = []
