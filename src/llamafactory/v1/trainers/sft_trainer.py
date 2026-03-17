@@ -13,22 +13,40 @@
 # limitations under the License.
 
 
-from ..config.parser import get_args
+from ..accelerator.interface import DistributedInterface
+from ..config import InputArgument, get_args
 from ..core.base_trainer import BaseTrainer
 from ..core.data_engine import DataEngine
 from ..core.model_engine import ModelEngine
+from ..utils.types import BatchInput, Tensor
 
 
 class SFTTrainer(BaseTrainer):
-    pass
+    def compute_loss(self, batch: BatchInput) -> Tensor:
+        shift_loss_weights = batch["loss_weights"].to(self.device, non_blocking=True)[..., 1:]
+        log_probs = self.compute_log_probs(self.model, batch)
+        loss = (-log_probs * shift_loss_weights).sum() / (shift_loss_weights.sum() + 1e-6)
+        return loss
 
 
-def run_sft():
-    model_args, data_args, training_args, _ = get_args()
-    model_engine = ModelEngine(model_args)
-    data_engine = DataEngine(data_args)
-    model = model_engine.get_model()
-    processor = model_engine.get_processor()
-    data_loader = data_engine.get_data_loader(processor)
-    trainer = SFTTrainer(training_args, model, processor, data_loader)
+def run_sft(args: InputArgument = None):
+    model_args, data_args, training_args, _ = get_args(args)
+    DistributedInterface(training_args.dist_config)
+    train_dataset = DataEngine(data_args.train_dataset)
+    model_engine = ModelEngine(model_args, is_train=True)
+    trainer = SFTTrainer(
+        args=training_args,
+        model=model_engine.model,
+        renderer=model_engine.renderer,
+        train_dataset=train_dataset,
+    )
     trainer.fit()
+    trainer.save_model()
+    DistributedInterface().destroy()
+
+
+if __name__ == "__main__":
+    """
+    python -m llamafactory.v1.trainers.sft_trainer --model Qwen/Qwen3-0.6B --train_dataset data/v1_sft_demo.yaml
+    """
+    run_sft()

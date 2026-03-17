@@ -70,12 +70,20 @@ def is_matplotlib_available():
     return _is_package_available("matplotlib")
 
 
+def is_mcore_adapter_available():
+    return _is_package_available("mcore_adapter")
+
+
 def is_pillow_available():
     return _is_package_available("PIL")
 
 
 def is_ray_available():
     return _is_package_available("ray")
+
+
+def is_kt_available():
+    return _is_package_available("ktransformers")
 
 
 def is_requests_available():
@@ -101,6 +109,11 @@ def is_starlette_available():
 @lru_cache
 def is_transformers_version_greater_than(content: str):
     return _get_package_version("transformers") >= version.parse(content)
+
+
+@lru_cache
+def is_torch_version_greater_than(content: str):
+    return _get_package_version("torch") >= version.parse(content)
 
 
 def is_uvicorn_available():

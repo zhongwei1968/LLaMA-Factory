@@ -103,7 +103,9 @@ class FixValueHeadModelCallback(TrainerCallback):
         if args.should_save:
             output_dir = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
             fix_valuehead_checkpoint(
-                model=kwargs.pop("model"), output_dir=output_dir, safe_serialization=args.save_safetensors
+                model=kwargs.pop("model"),
+                output_dir=output_dir,
+                safe_serialization=getattr(args, "save_safetensors", True),
             )
 
 
@@ -137,7 +139,7 @@ class PissaConvertCallback(TrainerCallback):
             if isinstance(model, PeftModel):
                 init_lora_weights = getattr(model.peft_config["default"], "init_lora_weights")
                 setattr(model.peft_config["default"], "init_lora_weights", True)
-                model.save_pretrained(pissa_init_dir, safe_serialization=args.save_safetensors)
+                model.save_pretrained(pissa_init_dir, safe_serialization=getattr(args, "save_safetensors", True))
                 setattr(model.peft_config["default"], "init_lora_weights", init_lora_weights)
 
     @override
@@ -155,11 +157,11 @@ class PissaConvertCallback(TrainerCallback):
             if isinstance(model, PeftModel):
                 init_lora_weights = getattr(model.peft_config["default"], "init_lora_weights")
                 setattr(model.peft_config["default"], "init_lora_weights", True)
-                model.save_pretrained(pissa_backup_dir, safe_serialization=args.save_safetensors)
+                model.save_pretrained(pissa_backup_dir, safe_serialization=getattr(args, "save_safetensors", True))
                 setattr(model.peft_config["default"], "init_lora_weights", init_lora_weights)
                 model.save_pretrained(
                     pissa_convert_dir,
-                    safe_serialization=args.save_safetensors,
+                    safe_serialization=getattr(args, "save_safetensors", True),
                     path_initial_model_for_weight_conversion=pissa_init_dir,
                 )
                 model.load_adapter(pissa_backup_dir, "default", is_trainable=True)
@@ -226,7 +228,7 @@ class LogCallback(TrainerCallback):
         if (
             args.should_save
             and os.path.exists(os.path.join(args.output_dir, TRAINER_LOG))
-            and args.overwrite_output_dir
+            and getattr(args, "overwrite_output_dir", False)
         ):
             logger.warning_rank0_once("Previous trainer log in this folder will be deleted.")
             os.remove(os.path.join(args.output_dir, TRAINER_LOG))
@@ -361,6 +363,18 @@ class ReporterCallback(TrainerCallback):
             import wandb
 
             wandb.config.update(
+                {
+                    "model_args": self.model_args.to_dict(),
+                    "data_args": self.data_args.to_dict(),
+                    "finetuning_args": self.finetuning_args.to_dict(),
+                    "generating_args": self.generating_args.to_dict(),
+                }
+            )
+
+        if "trackio" in args.report_to:
+            import trackio
+
+            trackio.config.update(
                 {
                     "model_args": self.model_args.to_dict(),
                     "data_args": self.data_args.to_dict(),

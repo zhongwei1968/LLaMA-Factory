@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
@@ -189,6 +190,16 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
                 "video_grid_thw": mm_inputs.get("video_grid_thw"),
                 "attention_mask": (features["attention_mask"] >= 1).float(),
             }
+            if "mm_token_type_ids" in inspect.signature(self.get_rope_func).parameters:
+                image_token_id = getattr(self.model.config, "image_token_id", None)
+                video_token_id = getattr(self.model.config, "video_token_id", None)
+                if image_token_id is not None or video_token_id is not None:
+                    mm_token_type_ids = torch.zeros_like(features["input_ids"])
+                    if image_token_id is not None:
+                        mm_token_type_ids[features["input_ids"] == image_token_id] = 1
+                    if video_token_id is not None:
+                        mm_token_type_ids[features["input_ids"] == video_token_id] = 2
+                    rope_index_kwargs["mm_token_type_ids"] = mm_token_type_ids
             if "second_per_grid_ts" in mm_inputs:  # for qwen2vl
                 rope_index_kwargs["second_per_grid_ts"] = mm_inputs.get("second_per_grid_ts")
             elif "video_second_per_grid" in mm_inputs:  # for qwen2.5 omni
@@ -213,11 +224,13 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
             and getattr(self.model.config, "model_type", None)
             in [
                 "glm4v",
+                "glm_ocr",
                 "Keye",
                 "qwen2_vl",
                 "qwen2_5_vl",
                 "qwen2_5_omni_thinker",
                 "qwen3_omni_moe_thinker",
+                "qwen3_5",
                 "qwen3_vl",
                 "qwen3_vl_moe",
             ]

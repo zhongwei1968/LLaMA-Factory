@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import json
 import re
 from abc import ABC, abstractmethod
@@ -61,12 +62,42 @@ LLAMA3_TOOL_PROMPT = (
     "Do not use variables.\n\n{tool_text}"
 )
 
+MINIMAX_M1_TOOL_PROMPT = (
+    "You are provided with these tools:\n<tools>\n{tool_text}</tools>\n\n"
+    "If you need to call tools, please respond with <tool_calls></tool_calls> XML tags, and provide tool-name and "
+    "json-object of arguments, following the format below:\n<tool_calls>\n"
+    """{{"name": <tool-name-1>, "arguments": <args-json-object-1>}}\n...\n</tool_calls>"""
+)
+
+MINIMAX_M2_TOOL_PROMPT = (
+    "\n\n# Tools\n\nYou may call one or more tools to assist with the user query.\n"
+    "Here are the tools available in JSONSchema format:\n\n<tools>\n{tool_text}</tools>\n\n"
+    "When making tool calls, use XML format to invoke tools and pass parameters:\n"
+    """\n<minimax:tool_call>\n<invoke name="tool-name-1">\n<parameter name="param-key-1">param-value-1</parameter>\n"""
+    """<parameter name="param-key-2">param-value-2</parameter>\n...\n</invoke>\n</minimax:tool_call>"""
+)
+
 QWEN_TOOL_PROMPT = (
     "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\n"
     "You are provided with function signatures within <tools></tools> XML tags:\n<tools>{tool_text}"
     "\n</tools>\n\nFor each function call, return a json object with function name and arguments within "
     """<tool_call></tool_call> XML tags:\n<tool_call>\n{{"name": <function-name>, """
     """"arguments": <args-json-object>}}\n</tool_call>"""
+)
+
+QWEN35_TOOL_PROMPT = (
+    "\n\n# Tools\n\nYou have access to the following functions:\n\n<tools>{tool_text}"
+    "\n</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n"
+    "<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n"
+    "<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n"
+    "</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n"
+    "- Function calls MUST follow the specified format: "
+    "an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n"
+    "- Required parameters MUST be specified\n"
+    "- You may provide optional reasoning for your function call in natural language "
+    "BEFORE the function call, but NOT after\n"
+    "- If there is no function call available, answer the question like normal with your current knowledge "
+    "and do not tell the user about function calls\n</IMPORTANT>"
 )
 
 SEED_TOOL_PROMPT = (
@@ -85,6 +116,8 @@ LING_TOOL_PROMPT = (
     """<tool_call></tool_call> XML tags:\n<tool_call>\n{{"name": <function-name>, """
     """"arguments": <args-json-object>}}\n</tool_call>"""
 )
+
+LFM2_TOOL_PROMPT = "List of tools: <|tool_list_start|>{tool_text}<|tool_list_end|>"
 
 
 @dataclass
@@ -253,6 +286,109 @@ class Llama3ToolUtils(ToolUtils):
             return content
 
 
+class MiniMaxM1ToolUtils(ToolUtils):
+    r"""MiniMax-M1 tool using template."""
+
+    @override
+    @staticmethod
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
+        tool_text = ""
+        for tool in tools:
+            tool = tool.get("function", "") if tool.get("type") == "function" else tool
+            tool_text += json.dumps(tool, ensure_ascii=False) + "\n"
+
+        return MINIMAX_M1_TOOL_PROMPT.format(tool_text=tool_text)
+
+    @override
+    @staticmethod
+    def function_formatter(functions: list["FunctionCall"]) -> str:
+        function_texts = []
+        for func in functions:
+            name, arguments = func.name, json.loads(func.arguments)
+            function_texts.append(json.dumps({"name": name, "arguments": arguments}, ensure_ascii=False))
+
+        return "<tool_calls>\n" + "\n".join(function_texts) + "\n</tool_calls>"
+
+    @override
+    @staticmethod
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
+        regex = re.compile(r"<tool_calls>\s*(.+?)\s*</tool_calls>", re.DOTALL)
+        tool_match = re.search(regex, content)
+        if not tool_match:
+            return content
+
+        tool_calls_content = tool_match.group(1)
+        results = []
+        for line in tool_calls_content.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                tool_call = json.loads(line)
+                results.append(FunctionCall(tool_call["name"], json.dumps(tool_call["arguments"], ensure_ascii=False)))
+            except json.JSONDecodeError:
+                continue
+
+        return results
+
+
+class MiniMaxM2ToolUtils(ToolUtils):
+    r"""MiniMax-M2 tool using template."""
+
+    @override
+    @staticmethod
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
+        tool_text = ""
+        for tool in tools:
+            tool = tool.get("function", "") if tool.get("type") == "function" else tool
+            tool_text += "<tool>" + json.dumps(tool, ensure_ascii=False) + "</tool>\n"
+
+        return MINIMAX_M2_TOOL_PROMPT.format(tool_text=tool_text)
+
+    @override
+    @staticmethod
+    def function_formatter(functions: list["FunctionCall"]) -> str:
+        function_texts = []
+        for func in functions:
+            name, arguments = func.name, json.loads(func.arguments)
+            prompt = f'<invoke name="{name}">'
+            for key, value in arguments.items():
+                prompt += f'\n<parameter name="{key}">'
+                if not isinstance(value, str):
+                    value = json.dumps(value, ensure_ascii=False)
+                prompt += value + "</parameter>"
+            prompt += "\n</invoke>"
+            function_texts.append(prompt)
+
+    @override
+    @staticmethod
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
+        regex = re.compile(r"<minimax:tool_call>\s*(.+?)\s*</minimax:tool_call>", re.DOTALL)
+        tool_match = re.search(regex, content)
+        if not tool_match:
+            return content
+
+        tool_calls_content = tool_match.group(1)
+        invoke_regex = re.compile(r"<invoke name=\"(.*?)\">(.*?)</invoke>", re.DOTALL)
+        results = []
+
+        for func_name, params_block in re.findall(invoke_regex, tool_calls_content):
+            args_dict = {}
+            param_pattern = re.compile(r"<parameter name=\"(.*?)\">(.*?)</parameter>", re.DOTALL)
+            for key, raw_value in re.findall(param_pattern, params_block):
+                value = raw_value.strip()
+                try:
+                    parsed_value = json.loads(value)
+                except json.JSONDecodeError:
+                    parsed_value = raw_value
+                args_dict[key] = parsed_value
+
+            results.append(FunctionCall(func_name.strip(), json.dumps(args_dict, ensure_ascii=False)))
+
+        return results
+
+
 class MistralToolUtils(ToolUtils):
     r"""Mistral v0.3 tool using template."""
 
@@ -330,6 +466,57 @@ class QwenToolUtils(ToolUtils):
             results.append(FunctionCall(tool["name"], json.dumps(tool["arguments"], ensure_ascii=False)))
 
         return results
+
+
+class Qwen35ToolUtils(ToolUtils):
+    r"""Qwen 3.5 tool using template."""
+
+    @override
+    @staticmethod
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
+        tool_text = ""
+        for tool in tools:
+            tool = tool.get("function", tool) if tool.get("type") == "function" else tool
+            tool_text += "\n" + json.dumps(tool, ensure_ascii=False)
+
+        return QWEN35_TOOL_PROMPT.format(tool_text=tool_text)
+
+    @override
+    @staticmethod
+    def function_formatter(functions: list["FunctionCall"]) -> str:
+        function_texts = []
+        for func in functions:
+            name, arguments = func.name, json.loads(func.arguments)
+            prompt = f"<tool_call>\n<function={name}>"
+            for key, value in arguments.items():
+                prompt += f"\n<parameter={key}>"
+                if not isinstance(value, str):
+                    value = json.dumps(value, ensure_ascii=False)
+                prompt += f"\n{value}\n</parameter>"
+            prompt += "\n</function>\n</tool_call>"
+            function_texts.append(prompt)
+
+        return "\n".join(function_texts)
+
+    @override
+    @staticmethod
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
+        results = []
+        regex = re.compile(r"<tool_call>\s*<function=\s*([^\s<>]+)\s*(.*?)\s*</function>\s*</tool_call>", re.DOTALL)
+        for func_name, params_block in re.findall(regex, content):
+            args_dict = {}
+            param_pattern = re.compile(r"<parameter=(.*?)>(.*?)</parameter>", re.DOTALL)
+            for key, raw_value in re.findall(param_pattern, params_block.strip()):
+                value = raw_value.strip()
+                try:
+                    parsed_value = json.loads(value)
+                except json.JSONDecodeError:
+                    parsed_value = raw_value.strip()
+                args_dict[key] = parsed_value
+
+            results.append(FunctionCall(func_name.strip(), json.dumps(args_dict, ensure_ascii=False)))
+
+        return results if results else content
 
 
 class GLM4MOEToolUtils(QwenToolUtils):
@@ -428,12 +615,120 @@ class LingToolUtils(QwenToolUtils):
         return LING_TOOL_PROMPT.format(tool_text=tool_text) + "\n" + "detailed thinking off"
 
 
+class LFM2ToolUtils(ToolUtils):
+    r"""LFM2.5 tool using template with Pythonic function call syntax."""
+
+    @override
+    @staticmethod
+    def tool_formatter(tools: list[dict[str, Any]]) -> str:
+        tool_list = []
+        for tool in tools:
+            tool = tool.get("function", tool) if tool.get("type") == "function" else tool
+            tool_list.append(tool)
+
+        return LFM2_TOOL_PROMPT.format(tool_text=json.dumps(tool_list, ensure_ascii=False))
+
+    @override
+    @staticmethod
+    def function_formatter(functions: list["FunctionCall"]) -> str:
+        calls = []
+        for name, args_json in functions:
+            args = json.loads(args_json)
+            kwargs_parts = []
+            for key, value in args.items():
+                if isinstance(value, str):
+                    kwargs_parts.append(f'{key}="{value}"')
+                else:
+                    kwargs_parts.append(f"{key}={json.dumps(value, ensure_ascii=False)}")
+
+            calls.append(f"{name}({', '.join(kwargs_parts)})")
+
+        return f"<|tool_call_start|>[{', '.join(calls)}]<|tool_call_end|>"
+
+    @staticmethod
+    def _ast_to_value(node: ast.AST) -> Any:
+        """Convert an AST node to a Python value, handling JSON-style booleans/null."""
+        # Handle JSON-style true/false/null as Name nodes
+        if isinstance(node, ast.Name):
+            if node.id == "true":
+                return True
+            elif node.id == "false":
+                return False
+            elif node.id == "null":
+                return None
+            else:
+                raise ValueError(f"Unknown identifier: {node.id}")
+
+        # Use literal_eval for other cases (strings, numbers, lists, dicts)
+        return ast.literal_eval(node)
+
+    @override
+    @staticmethod
+    def tool_extractor(content: str) -> Union[str, list["FunctionCall"]]:
+        # Extract content between tool call markers
+        start_marker = "<|tool_call_start|>"
+        end_marker = "<|tool_call_end|>"
+
+        start_idx = content.find(start_marker)
+        if start_idx == -1:
+            return content
+
+        end_idx = content.find(end_marker, start_idx)
+        if end_idx == -1:
+            return content
+
+        tool_call_str = content[start_idx + len(start_marker) : end_idx].strip()
+
+        # Parse Pythonic function call syntax using AST
+        try:
+            tree = ast.parse(tool_call_str, mode="eval")
+        except SyntaxError:
+            return content
+
+        # Handle both single call and list of calls
+        if isinstance(tree.body, ast.List):
+            call_nodes = tree.body.elts
+        elif isinstance(tree.body, ast.Call):
+            call_nodes = [tree.body]
+        else:
+            return content
+
+        results = []
+        for node in call_nodes:
+            if not isinstance(node, ast.Call):
+                return content
+
+            # Extract function name
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+            else:
+                return content
+
+            # Extract keyword arguments
+            args_dict = {}
+            for keyword in node.keywords:
+                key = keyword.arg
+                try:
+                    value = LFM2ToolUtils._ast_to_value(keyword.value)
+                except (ValueError, SyntaxError):
+                    return content
+                args_dict[key] = value
+
+            results.append(FunctionCall(func_name, json.dumps(args_dict, ensure_ascii=False)))
+
+        return results if results else content
+
+
 TOOLS = {
     "default": DefaultToolUtils(),
     "glm4": GLM4ToolUtils(),
     "llama3": Llama3ToolUtils(),
+    "lfm2": LFM2ToolUtils(),
+    "minimax1": MiniMaxM1ToolUtils(),
+    "minimax2": MiniMaxM2ToolUtils(),
     "mistral": MistralToolUtils(),
     "qwen": QwenToolUtils(),
+    "qwen3_5": Qwen35ToolUtils(),
     "glm4_moe": GLM4MOEToolUtils(),
     "seed_oss": SeedToolUtils(),
     "ling": LingToolUtils(),

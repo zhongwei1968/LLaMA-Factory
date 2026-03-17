@@ -14,13 +14,15 @@
 
 import os
 
+import pytest
 import torch
 from PIL import Image
-from transformers import AutoConfig, AutoModelForVision2Seq
+from transformers import AutoConfig, AutoModelForImageTextToText
 
 from llamafactory.data import get_template_and_fix_tokenizer
 from llamafactory.data.collator import MultiModalDataCollatorForSeq2Seq, prepare_4d_attention_mask
 from llamafactory.extras.constants import IGNORE_INDEX
+from llamafactory.extras.packages import is_transformers_version_greater_than
 from llamafactory.hparams import get_infer_args
 from llamafactory.model import load_tokenizer
 
@@ -28,6 +30,7 @@ from llamafactory.model import load_tokenizer
 TINY_LLAMA3 = os.getenv("TINY_LLAMA3", "llamafactory/tiny-random-Llama-3")
 
 
+@pytest.mark.runs_on(["cpu", "mps"])
 def test_base_collator():
     model_args, data_args, *_ = get_infer_args({"model_name_or_path": TINY_LLAMA3, "template": "default"})
     tokenizer_module = load_tokenizer(model_args)
@@ -71,6 +74,7 @@ def test_base_collator():
         assert batch_input[k].eq(torch.tensor(expected_input[k])).all()
 
 
+@pytest.mark.runs_on(["cpu", "mps"])
 def test_multimodal_collator():
     model_args, data_args, *_ = get_infer_args(
         {"model_name_or_path": "Qwen/Qwen2-VL-2B-Instruct", "template": "qwen2_vl"}
@@ -79,7 +83,7 @@ def test_multimodal_collator():
     template = get_template_and_fix_tokenizer(tokenizer_module["tokenizer"], data_args)
     config = AutoConfig.from_pretrained(model_args.model_name_or_path)
     with torch.device("meta"):
-        model = AutoModelForVision2Seq.from_config(config)
+        model = AutoModelForImageTextToText.from_config(config)
 
     data_collator = MultiModalDataCollatorForSeq2Seq(
         template=template,
@@ -113,19 +117,22 @@ def test_multimodal_collator():
         "labels": [
             [0, 1, 2, 3, q, q, q, q, q, q, q, q],
         ],
-        "position_ids": [
-            [[0, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1]],
-        ],
-        "rope_deltas": [[-8]],
+        "position_ids": [[[0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0]]] * 3,
+        "rope_deltas": [[0]],
         **tokenizer_module["processor"].image_processor(fake_image),
     }
+    if not is_transformers_version_greater_than("5.0.0"):
+        # adapt position_ids and rope_deltas for transformers < 5.0.0
+        # https://github.com/huggingface/transformers/pull/43972
+        expected_input["position_ids"] = [[[0, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1]]] * 3
+        expected_input["rope_deltas"] = [[-8]]
+
     assert batch_input.keys() == expected_input.keys()
     for k in batch_input.keys():
         assert batch_input[k].eq(torch.tensor(expected_input[k])).all()
 
 
+@pytest.mark.runs_on(["cpu"])
 def test_4d_attention_mask():
     o = 0.0
     x = torch.finfo(torch.float16).min

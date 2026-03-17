@@ -77,6 +77,14 @@ def apply_liger_kernel(
         from liger_kernel.transformers import apply_liger_kernel_to_qwen3 as apply_liger_kernel
     elif model_type == "qwen3_moe":
         from liger_kernel.transformers import apply_liger_kernel_to_qwen3_moe as apply_liger_kernel
+    elif model_type == "qwen3_next":
+        from liger_kernel.transformers import apply_liger_kernel_to_qwen3_next as apply_liger_kernel
+    elif model_type == "gpt_oss":
+        try:
+            from liger_kernel.transformers import apply_liger_kernel_to_gpt_oss as apply_liger_kernel
+        except ImportError:
+            logger.warning_rank0("Please install liger-kernel from https://github.com/Comet0322/Liger-Kernel.")
+            return
     else:
         logger.warning_rank0("Current model does not support liger kernel.")
         return
