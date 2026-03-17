@@ -387,18 +387,30 @@ def get_dataset(
         )
 
     with training_args.main_process_first(desc="pre-process dataset", local=(not data_args.data_shared_file_system)):
-        # move front to make sure eval_dataset(if contain or split) can preprocessed appropriately
+        dataset = _preprocess_dataset_collection(
+            dataset,
+            data_args,
+            training_args,
+            stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=False,
+            keep_separate=False,
+        )
+        eval_dataset = _preprocess_dataset_collection(
+            eval_dataset,
+            data_args,
+            training_args,
+            stage,
+            template,
+            tokenizer,
+            processor,
+            is_eval=True,
+            keep_separate=data_args.eval_on_each_dataset,
+        )
+
         train_dict, eval_dict = split_dataset(dataset, eval_dataset, data_args, seed=training_args.seed)
-
-        if "train" in train_dict:
-            train_dict["train"] = _get_preprocessed_dataset(
-                train_dict["train"], data_args, training_args, stage, template, tokenizer, processor, is_eval=False
-            )
-
-        for key in eval_dict:
-            eval_dict[key] = _get_preprocessed_dataset(
-                eval_dict[key], data_args, training_args, stage, template, tokenizer, processor, is_eval=True
-            )
 
         # Combine train and eval dictionaries
         dataset_dict = DatasetDict({**train_dict, **eval_dict})
