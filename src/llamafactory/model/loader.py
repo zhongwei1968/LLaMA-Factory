@@ -177,7 +177,6 @@ def load_model(
             else:
                 # Force the whole model onto CPU
                 # init_kwargs["device_map"] = "cpu"
-                init_kwargs["device_map"] = "cpu"
                 model = load_class.from_pretrained(**init_kwargs)
                 if getattr(model.config, "model_type", None) in ["qwen2_5_omni", "qwen3_omni_moe"]:
                     model = getattr(model, "thinker")
