@@ -33,7 +33,7 @@ COPY . /app
 
 # Install LLaMA Factory
 RUN pip install --no-cache-dir --no-build-isolation -e . && \
-    pip install --no-cache-dir --no-build-isolation -r requirements/metrics.txt -r requirements/deepspeed.txt
+    pip install --no-cache-dir --no-build-isolation -r requirements/metrics.txt -r requirements/deepspeed.txt -r requirements/bitsandbytes.txt
 
 # Rebuild flash attention
 RUN if [ "${INSTALL_FLASHATTN}" == "true" ]; then \
