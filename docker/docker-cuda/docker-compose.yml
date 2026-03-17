@@ -21,4 +21,7 @@ services:
           - driver: nvidia
             count: "all"
             capabilities: [ gpu ]
+    volumes:
+      - ~/models:/models
+      - ~/data:/data
     restart: unless-stopped
