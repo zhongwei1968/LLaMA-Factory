@@ -24,4 +24,5 @@ services:
     volumes:
       - ~/models:/models
       - ~/data:/data
+      - /opt/dlami/nvme:/checkpoints
     restart: unless-stopped
