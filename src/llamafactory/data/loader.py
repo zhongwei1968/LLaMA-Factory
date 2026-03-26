@@ -235,6 +235,7 @@ def _get_preprocessed_dataset(
     tokenizer: "PreTrainedTokenizer",
     processor: Optional["ProcessorMixin"] = None,
     is_eval: bool = False,
+    name: Optional[str] = None,
 ) -> Union["Dataset", "IterableDataset"] | None:
     r"""Preprocesses the dataset, including format checking and tokenization."""
     if dataset is None:
@@ -249,7 +250,7 @@ def _get_preprocessed_dataset(
         kwargs = dict(
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=(not data_args.overwrite_cache) or (training_args.local_process_index != 0),
-            desc="Running tokenizer on dataset",
+            desc=f"Running tokenizer on dataset {name}" if name else "Running tokenizer on dataset",
         )
 
     dataset = dataset.map(
@@ -330,6 +331,7 @@ def _preprocess_dataset_collection(
             tokenizer,
             processor,
             is_eval=is_eval,
+            name=name,
         )
 
     if keep_separate:
